@@ -1,0 +1,62 @@
+{
+  "tournament_format": {
+    "name": "4 team round robin -> winners & losers bracket",
+    "description": "One round robin stage (3 rounds) followed by a winners and a losers bracket round.",
+    "stages": [
+      {
+        "stage_id": 1,
+        "stage_name": "Round Robin",
+        "type": "round_robin",
+        "rounds": [
+          {
+            "round_in_stage": 1,
+            "pairings": [
+              { "match_number": 1, "teams": ["T1", "T2"] },
+              { "match_number": 2, "teams": ["T3", "T4"] }
+            ]
+          },
+          {
+            "round_in_stage": 2,
+            "pairings": [
+              { "match_number": 1, "teams": ["T1", "T3"] },
+              { "match_number": 2, "teams": ["T2", "T4"] }
+            ]
+          },
+          {
+            "round_in_stage": 3,
+            "pairings": [
+              { "match_number": 1, "teams": ["T1", "T4"] },
+              { "match_number": 2, "teams": ["T2", "T3"] }
+            ]
+          }
+        ]
+      },
+      {
+        "stage_id": 2,
+        "stage_name": "Winners Bracket",
+        "type": "single_elimination",
+        "rounds": [
+          {
+            "round_in_stage": 1,
+            "pairings": [
+              { "match_number": 1, "teams": ["T1", "T2"] }
+            ]
+          }
+        ]
+      },
+      {
+        "stage_id": 3,
+        "stage_name": "Losers Bracket",
+        "type": "single_elimination",
+        "rounds": [
+          {
+            "round_in_stage": 1,
+            "pairings": [
+              { "match_number": 1, "teams": ["T3", "T4"] }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

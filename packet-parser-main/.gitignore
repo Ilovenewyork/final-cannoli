@@ -1,0 +1,17 @@
+.DS_Store
+__pycache__
+
+.venv
+
+classifier/questions.json
+classifier/tossups.json
+classifier/bonuses.json
+classifier/*-old.json
+
+quizdb/quizdb.json
+
+p-doc
+p-docx
+p-pdf
+packets
+output

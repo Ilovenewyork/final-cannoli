@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if teamname %}Schedule for {{ teamname }}{% else %}Full Tournament Schedule{% endif %} | LIQBA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen flex flex-col">
+  <!-- Navbar -->
+  <nav class="bg-gray-800 text-white p-4">
+    <div class="container mx-auto flex justify-between">
+      <a href="{{ url_for('index') }}" class="font-bold hover:underline">LIQBA</a>
+      <a href="/" class="hover:underline">Home</a>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="container mx-auto flex-grow p-6">
+    <h2 class="text-3xl font-bold mb-6">
+      {% if teamname %}Schedule for "{{ teamname }}" in {{ tournament.name }}
+      {% else %}Full Schedule for {{ tournament.name }}{% endif %}
+    </h2>
+    <!-- Schedule details (Pairings view) -->
+    <div id="pairingsView">
+      {% for stage, data in schedule.items() %}
+        <div class="mb-8">
+          <h3 class="text-2xl font-semibold mb-3">{{ stage }}</h3>
+          {% if data.resolved %}
+            {% for rnd in data.rounds %}
+              <div class="mb-8 bg-white p-6 rounded-lg shadow-md">
+                <h4 class="text-xl font-bold mb-4 text-gray-800">{{ rnd.round_name }}</h4>
+                <div class="overflow-x-auto">
+                  <table class="w-full border-collapse">
+                    <thead>
+                      <tr class="bg-gray-100">
+                        <th class="border p-3 text-left">Match #</th>
+                        <th class="border p-3 text-left">Team 1</th>
+                        <th class="border p-3 text-center">Score</th>
+                        <th class="border p-3 text-center">vs</th>
+                        <th class="border p-3 text-center">Score</th>
+                        <th class="border p-3 text-right">Team 2</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for match in rnd.matches %}
+                        <tr class="{% if match.completed %}bg-green-50{% else %}hover:bg-gray-50{% endif %} transition-colors group">
+                          <td class="border p-3 font-medium align-top">{{ match.match_number }}</td>
+                          <td class="border p-3 align-top">
+                            <div class="font-medium">{{ match.teams[0] }}</div>
+                            {% if match.team1_players %}
+                              <div class="mt-1 text-sm text-gray-600">
+                                {% for player in match.team1_players %}
+                                  <div class="truncate">{{ player }}</div>
+                                {% endfor %}
+                              </div>
+                            {% endif %}
+                          </td>
+                          <td class="border p-3 text-center font-medium align-top {% if match.scores[0]|int > match.scores[1]|int and match.completed %}text-green-600{% endif %}">
+                            {{ match.scores[0] }}
+                          </td>
+                          <td class="border p-3 text-center text-gray-500 align-top">vs</td>
+                          <td class="border p-3 text-center font-medium align-top {% if match.scores[1]|int > match.scores[0]|int and match.completed %}text-green-600{% endif %}">
+                            {{ match.scores[1] }}
+                          </td>
+                          <td class="border p-3 align-top">
+                            <div class="font-medium">{{ match.teams[1] }}</div>
+                            {% if match.team2_players %}
+                              <div class="mt-1 text-sm text-gray-600">
+                                {% for player in match.team2_players %}
+                                  <div class="truncate">{{ player }}</div>
+                                {% endfor %}
+                              </div>
+                            {% endif %}
+                          </td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            {% endfor %}
+          {% else %}
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded">
+              <div class="flex">
+                <div class="flex-shrink-0">
+                  <svg class="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+                <div class="ml-3">
+                  <p class="text-sm text-yellow-700">
+                    {% if data.is_playoff %}
+                      {{ stage }} bracket will be available once the previous stage is complete.
+                    {% else %}
+                      {{ stage }} has {{ data.round_count }} rounds (details not yet resolved).
+                    {% endif %}
+                  </p>
+                </div>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    <!-- Add a link to the leaderboard -->
+    <div class="mt-8 text-center">
+      <a href="{{ url_for('public.team_leaderboard', tournament_id=tournament.id) }}" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded">
+        View Leaderboard
+      </a>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-gray-900 text-gray-300 text-center p-4">
+    Copyright madhavendra thakur for the LIQBA
+  </footer>
+</body>
+</html>

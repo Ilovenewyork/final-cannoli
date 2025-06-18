@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Submit Game Score | LIQBA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Optionally, retrieve the stored tournament password if needed
+    // const storedPwd = localStorage.getItem('tournament_password');
+  </script>
+</head>
+<body class="min-h-screen flex flex-col">
+  <!-- Navbar -->
+  <nav class="bg-gray-800 text-white p-4">
+    <div class="container mx-auto flex justify-between">
+      <a href="{{ url_for('index') }}" class="font-bold hover:underline">LIQBA</a>
+      <a href="{{ url_for('reader.select_tournament') }}" class="hover:underline">Back</a>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="container mx-auto flex-grow p-6">
+    <div class="bg-white p-6 rounded shadow">
+      <h2 class="text-2xl font-bold mb-4">Submit Score for Game {{ game.id }}</h2>
+      <p class="mb-4">{{ game.team1 }} vs. {{ game.team2 }}</p>
+      <div class="flex flex-col md:flex-row md:space-x-6">
+        {% if pdf_url %}
+        <div class="md:w-1/2 mb-6 md:mb-0">
+          <h3 class="text-xl font-semibold mb-2">Questions PDF</h3>
+          <iframe src="{{ pdf_url }}" class="w-full h-96 border"></iframe>
+        </div>
+        {% endif %}
+        <div class="{{ pdf_url and 'md:w-1/2' or 'w-full' }}">
+          <form method="POST" onsubmit="return compileScorecard();" class="space-y-4">
+            <div id="scorecard-container" class="overflow-auto">
+              <table class="min-w-full border-collapse">
+                <thead>
+                  <tr class="bg-gray-200">
+                    <th class="border p-2">Cycle</th>
+                    {% for player in players_team1 %}
+                      <th class="border p-2">{{ player }}</th>
+                    {% endfor %}
+                    <th class="border p-2">{{ game.team1 }} Bonus</th>
+                    {% for player in players_team2 %}
+                      <th class="border p-2">{{ player }}</th>
+                    {% endfor %}
+                    <th class="border p-2">{{ game.team2 }} Bonus</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for i in range(1,23) %}
+                  <tr>
+                    <td class="border p-2 text-center">{{ i }}</td>
+                    {% for j in range(players_team1|length) %}
+                    <td class="border p-2">
+                      <input type="number" id="cycle_{{ i }}_team1_player_{{ j }}" value="0" class="w-full border rounded px-2 py-1" oninput="updateTotals();">
+                    </td>
+                    {% endfor %}
+                    <td class="border p-2">
+                      <input type="number" id="cycle_{{ i }}_team1_bonus" value="0" min="0" class="w-full border rounded px-2 py-1" oninput="updateTotals();">
+                    </td>
+                    {% for j in range(players_team2|length) %}
+                    <td class="border p-2">
+                      <input type="number" id="cycle_{{ i }}_team2_player_{{ j }}" value="0" class="w-full border rounded px-2 py-1" oninput="updateTotals();">
+                    </td>
+                    {% endfor %}
+                    <td class="border p-2">
+                      <input type="number" id="cycle_{{ i }}_team2_bonus" value="0" min="0" class="w-full border rounded px-2 py-1" oninput="updateTotals();">
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <div id="running_totals" class="text-center font-semibold">
+              <span id="total_team1">Team {{ game.team1 }}: 0</span> | 
+              <span id="total_team2">Team {{ game.team2 }}: 0</span>
+            </div>
+            <textarea id="scorecard" name="scorecard" class="hidden"></textarea>
+            <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded">Submit Scorecard</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-gray-900 text-gray-300 text-center p-4">
+    Copyright madhavendra thakur for the LIQBA
+  </footer>
+  <script>
+    function updateTotals() {
+      let total1 = 0, total2 = 0;
+      for (let i = 1; i <= 22; i++) {
+        {% if players_team1|length > 0 %}
+          for (let j = 0; j < {{ players_team1|length }}; j++) {
+            let inp = document.getElementById('cycle_' + i + '_team1_player_' + j);
+            total1 += parseInt(inp.value) || 0;
+          }
+        {% endif %}
+        let bonus1 = document.getElementById('cycle_' + i + '_team1_bonus');
+        total1 += parseInt(bonus1.value) || 0;
+        {% if players_team2|length > 0 %}
+          for (let j = 0; j < {{ players_team2|length }}; j++) {
+            let inp = document.getElementById('cycle_' + i + '_team2_player_' + j);
+            total2 += parseInt(inp.value) || 0;
+          }
+        {% endif %}
+        let bonus2 = document.getElementById('cycle_' + i + '_team2_bonus');
+        total2 += parseInt(bonus2.value) || 0;
+      }
+      document.getElementById('total_team1').innerText = "Team {{ game.team1 }}: " + total1;
+      document.getElementById('total_team2').innerText = "Team {{ game.team2 }}: " + total2;
+    }
+    function compileScorecard() {
+      let cycles = [];
+      for (let i = 1; i <= 22; i++) {
+        let team1_players = [];
+        {% if players_team1|length > 0 %}
+          for (let j = 0; j < {{ players_team1|length }}; j++) {
+            let inp = document.getElementById('cycle_' + i + '_team1_player_' + j);
+            team1_players.push(parseInt(inp.value) || 0);
+          }
+        {% endif %}
+        let team1_bonus = parseInt(document.getElementById('cycle_' + i + '_team1_bonus').value) || 0;
+        let team2_players = [];
+        {% if players_team2|length > 0 %}
+          for (let j = 0; j < {{ players_team2|length }}; j++) {
+            let inp = document.getElementById('cycle_' + i + '_team2_player_' + j);
+            team2_players.push(parseInt(inp.value) || 0);
+          }
+        {% endif %}
+        let team2_bonus = parseInt(document.getElementById('cycle_' + i + '_team2_bonus').value) || 0;
+        let cycle_sum = team1_players.reduce((a, b) => a + b, 0) + team1_bonus + team2_players.reduce((a, b) => a + b, 0) + team2_bonus;
+        if(cycle_sum === 0) continue;
+        cycles.push({
+          cycle: i,
+          team1: { players: team1_players, bonus: team1_bonus },
+          team2: { players: team2_players, bonus: team2_bonus }
+        });
+      }
+      document.getElementById('scorecard').value = JSON.stringify({ cycles: cycles });
+      return true;
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>500 - Internal Server Error</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        h1 {
+            color: #d9534f;
+        }
+        a {
+            color: #337ab7;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .error-details {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 4px;
+            color: #721c24;
+            text-align: left;
+            display: none; /* Hide by default, can be shown in development */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>500 - Internal Server Error</h1>
+        <p>Sorry, something went wrong on our end. We're working to fix it.</p>
+        <p><a href="{{ url_for('index') }}">Return to Home</a></p>
+        
+        {% if config['DEBUG'] %}
+        <div class="error-details">
+            <h3>Error Details (DEBUG MODE ONLY)</h3>
+            <p><strong>Error:</strong> {{ error.__class__.__name__ }}</p>
+            <p><strong>Message:</strong> {{ str(error) }}</p>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

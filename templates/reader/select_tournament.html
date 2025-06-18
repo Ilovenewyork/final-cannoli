@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Select Tournament | LIQBA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    function storePassword() {
+      const pwd = document.getElementById('password').value;
+      localStorage.setItem('tournament_password', pwd);
+      return true;
+    }
+  </script>
+</head>
+<body class="min-h-screen flex flex-col">
+  <!-- Navbar -->
+  <nav class="bg-gray-800 text-white p-4">
+    <div class="container mx-auto">
+      <a href="{{ url_for('index') }}" class="font-bold hover:underline">LIQBA</a>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="container mx-auto flex-grow p-6">
+    <div class="max-w-md mx-auto bg-white p-6 rounded shadow">
+      <h2 class="text-2xl font-bold mb-4 text-center">Select Tournament</h2>
+      <form method="POST" onsubmit="storePassword();" class="space-y-4">
+        <div>
+          <label for="tournament_id" class="block font-medium">Tournament:</label>
+          <select id="tournament_id" name="tournament_id" required class="w-full border rounded px-3 py-2">
+            {% for tournament in tournaments %}
+              <option value="{{ tournament.id }}">{{ tournament.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="password" class="block font-medium">Tournament Password:</label>
+          <input type="password" id="password" name="password" required class="w-full border rounded px-3 py-2">
+        </div>
+        <button type="submit" class="w-full bg-purple-500 hover:bg-purple-600 text-white py-2 rounded">Proceed</button>
+      </form>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <ul class="mt-4">
+            {% for category, message in messages %}
+              <li class="text-sm text-{{ category }}-500">{{ message }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-gray-900 text-gray-300 text-center p-4">
+    Copyright madhavendra thakur for the LIQBA
+  </footer>
+</body>
+</html>

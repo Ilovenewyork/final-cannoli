@@ -1,0 +1,19 @@
+{
+    "Drama": "Drama",
+    "Poetry": "Poetry",
+    "Long Fiction": "Long Fiction",
+    "LongFic": "Long Fiction",
+    "Mixed Fiction": "Long Fiction",
+    "Long Form": "Long Fiction",
+    "Novel": "Long Fiction",
+    "Short Fiction": "Short Fiction",
+    "Short Story": "Short Fiction",
+    "Short Form": "Short Fiction",
+    "Nonfiction": "Misc Literature",
+    "Beliefs": "Beliefs",
+    "Practices": "Practices",
+    "Math": "Math",
+    "Mathematics": "Math",
+    "Statistics": "Math",
+    "Jazz": "Jazz"
+}

@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}Home - LIQBA{% endblock %}
+
+{% block content %}
+  <!-- Hero Section -->
+  <section class="bg-gradient-to-r from-gray-800 to-gray-900 text-white py-16 md:py-24 rounded-xl mb-12">
+    <div class="container mx-auto px-6 text-center">
+      <h1 class="text-4xl md:text-6xl font-bold mb-6">Welcome to LIQBA</h1>
+      <p class="text-xl md:text-2xl mb-8 max-w-3xl mx-auto">Your premier quiz bowl tournament management system</p>
+      <div class="flex flex-wrap justify-center gap-4">
+        <a href="{{ url_for('public.schedule_all', tournament_id=1) }}" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-full transition duration-300 transform hover:scale-105">
+          View Tournaments
+        </a>
+        <a href="#features" class="bg-white hover:bg-gray-100 text-gray-800 font-bold py-3 px-8 rounded-full transition duration-300 transform hover:scale-105">
+          Learn More
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Access Cards -->
+  <section class="mb-16">
+    <h2 class="text-3xl font-bold text-center mb-12">Quick Access</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div class="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
+        <div class="p-6">
+          <div class="text-blue-500 text-4xl mb-4">
+            <i class="bi bi-shield-lock"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3">Admin Portal</h3>
+          <p class="text-gray-600 mb-4">Manage tournaments, teams, and game data with our powerful admin tools.</p>
+          <a href="{{ url_for('admin.login') }}" class="text-blue-500 hover:underline font-medium inline-flex items-center">
+            Login <i class="bi bi-arrow-right ml-2"></i>
+          </a>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
+        <div class="p-6">
+          <div class="text-green-500 text-4xl mb-4">
+            <i class="bi bi-people"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3">Public View</h3>
+          <p class="text-gray-600 mb-4">View schedules, standings, and results for all active tournaments.</p>
+          <a href="{{ url_for('public.schedule_all', tournament_id=1) }}" class="text-green-500 hover:underline font-medium inline-flex items-center">
+            View Schedules <i class="bi bi-arrow-right ml-2"></i>
+          </a>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
+        <div class="p-6">
+          <div class="text-purple-500 text-4xl mb-4">
+            <i class="bi bi-file-earmark-text"></i>
+          </div>
+          <h3 class="text-xl font-bold mb-3">Reader Portal</h3>
+          <p class="text-gray-600 mb-4">Access the reader interface for live game management and scoring.</p>
+          <a href="{{ url_for('reader.select_tournament') }}" class="text-purple-500 hover:underline font-medium inline-flex items-center">
+            Enter Reader <i class="bi bi-arrow-right ml-2"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" class="py-12 bg-gray-50 rounded-xl p-8 mb-12">
+    <h2 class="text-3xl font-bold text-center mb-12">Features</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      <div class="flex items-start">
+        <div class="bg-blue-100 p-3 rounded-full mr-4">
+          <i class="bi bi-trophy text-blue-500 text-xl"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-lg mb-2">Tournament Management</h3>
+          <p class="text-gray-600">Easily create and manage quiz bowl tournaments with our intuitive interface.</p>
+        </div>
+      </div>
+      
+      <div class="flex items-start">
+        <div class="bg-green-100 p-3 rounded-full mr-4">
+          <i class="bi bi-graph-up text-green-500 text-xl"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-lg mb-2">Live Scoring</h3>
+          <p class="text-gray-600">Track scores in real-time with our powerful scoring system.</p>
+        </div>
+      </div>
+      
+      <div class="flex items-start">
+        <div class="bg-purple-100 p-3 rounded-full mr-4">
+          <i class="bi bi-people-fill text-purple-500 text-xl"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-lg mb-2">Team Management</h3>
+          <p class="text-gray-600">Manage teams, players, and staff with our comprehensive tools.</p>
+        </div>
+      </div>
+      
+      <div class="flex items-start">
+        <div class="bg-yellow-100 p-3 rounded-full mr-4">
+          <i class="bi bi-calendar-event text-yellow-500 text-xl"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-lg mb-2">Scheduling</h3>
+          <p class="text-gray-600">Create and manage game schedules with drag-and-drop functionality.</p>
+        </div>
+      </div>
+      
+      <div class="flex items-start">
+        <div class="bg-red-100 p-3 rounded-full mr-4">
+          <i class="bi bi-bar-chart-line text-red-500 text-xl"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-lg mb-2">Statistics</h3>
+          <p class="text-gray-600">Access detailed statistics and analytics for teams and players.</p>
+        </div>
+      </div>
+      
+      <div class="flex items-start">
+        <div class="bg-indigo-100 p-3 rounded-full mr-4">
+          <i class="bi bi-phone text-indigo-500 text-xl"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-lg mb-2">Mobile Friendly</h3>
+          <p class="text-gray-600">Access all features on any device with our responsive design.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section
+  <section class="bg-blue-600 text-white rounded-xl p-12 text-center mb-12">
+    <h2 class="text-3xl font-bold mb-4">Ready to Get Started?</h2>
+    <p class="text-xl mb-8 max-w-2xl mx-auto">Join hundreds of schools and organizations using LIQBA for their quiz bowl tournaments.</p>
+    <div class="flex flex-wrap justify-center gap-4">
+      <a href="{{ url_for('admin.login') }}" class="bg-white text-blue-600 hover:bg-gray-100 font-bold py-3 px-8 rounded-full transition duration-300 transform hover:scale-105">
+        Admin Login
+      </a>
+      <a href="{{ url_for('public.schedule_all', tournament_id=1) }}" class="border-2 border-white text-white hover:bg-white hover:text-blue-600 font-bold py-3 px-8 rounded-full transition duration-300 transform hover:scale-105">
+        View Tournaments
+      </a>
+    </div>
+  </section> -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Smooth scrolling for anchor links
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+      e.preventDefault();
+      document.querySelector(this.getAttribute('href')).scrollIntoView({
+        behavior: 'smooth'
+      });
+    });
+  });
+</script>
+{% endblock %}

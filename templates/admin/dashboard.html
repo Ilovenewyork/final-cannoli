@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard | LIQBA{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+  <!-- Header -->
+  <header class="bg-white shadow-sm">
+    <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+      <h1 class="text-2xl font-semibold text-gray-900">Tournament Management</h1>
+      <div>
+        <a href="{{ url_for('admin.logout') }}" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+          <i class="bi bi-box-arrow-right mr-1"></i>Logout
+        </a>
+      </div>
+    </div>
+  </header>
+
+    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <!-- Create Tournament Card -->
+      <div class="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
+        <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+          <h3 class="text-lg leading-6 font-medium text-gray-900">Create New Tournament</h3>
+          <p class="mt-1 max-w-2xl text-sm text-gray-500">Fill in the details below to create a new tournament</p>
+        </div>
+        <div class="px-4 py-5 sm:p-6">
+          <form action="{{ url_for('admin.create_tournament') }}" method="post" class="space-y-6">
+            <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
+              <div class="sm:col-span-6 md:col-span-3">
+                <label for="name" class="block text-sm font-medium text-gray-700">Tournament Name</label>
+                <input type="text" name="name" id="name" required 
+                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+              </div>
+              
+              <div class="sm:col-span-6 md:col-span-3">
+                <label for="date" class="block text-sm font-medium text-gray-700">Date</label>
+                <input type="date" name="date" id="date" required 
+                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+              </div>
+              
+              <div class="sm:col-span-6 md:col-span-3">
+                <label for="location" class="block text-sm font-medium text-gray-700">Location</label>
+                <input type="text" name="location" id="location" required 
+                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+              </div>
+              
+              <div class="sm:col-span-6 md:col-span-3">
+                <label for="format" class="block text-sm font-medium text-gray-700">Format</label>
+                <select id="format" name="format" required 
+                        class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                  {% for format in formats %}
+                    <option value="{{ format }}">{{ format }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            
+            <div class="flex justify-end">
+              <button type="submit" 
+                      class="ml-3 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                Create Tournament
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Existing Tournaments -->
+      <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+        <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+          <h3 class="text-lg leading-6 font-medium text-gray-900">Existing Tournaments</h3>
+          <p class="mt-1 max-w-2xl text-sm text-gray-500">Manage your existing tournaments</p>
+        </div>
+        <div class="bg-white shadow overflow-hidden sm:rounded-b-lg">
+          <ul class="divide-y divide-gray-200">
+            {% for tournament in tournaments %}
+            <li class="hover:bg-gray-50">
+              <a href="{{ url_for('admin.tournament_details', tournament_id=tournament.id) }}" 
+                 class="block px-4 py-4 sm:px-6">
+                <div class="flex items-center justify-between">
+                  <p class="text-sm font-medium text-blue-600 truncate">{{ tournament.name }}</p>
+                </div>
+                <div class="mt-2 sm:flex sm:justify-between">
+                  <div class="sm:flex">
+                    <p class="flex items-center text-sm text-gray-500">
+                      <i class="bi bi-calendar-event mr-1.5 h-5 w-5 text-gray-400"></i>
+                      {{ tournament.date.strftime('%B %d, %Y') }}
+                    </p>
+                    <p class="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
+                      <i class="bi bi-geo-alt mr-1.5 h-5 w-5 text-gray-400"></i>
+                      {{ tournament.location }}
+                    </p>
+                  </div>
+                  <div class="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
+                    <i class="bi bi-arrow-right-circle-fill text-blue-500 mr-1"></i>
+                    View Details
+                  </div>
+                </div>
+              </a>
+            </li>
+            {% else %}
+            <li class="px-4 py-6 sm:px-6 text-center text-gray-500">
+              No tournaments found. Create your first tournament above.
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Set default date to today
+  document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('date').min = today;
+  });
+</script>
+{% endblock %}

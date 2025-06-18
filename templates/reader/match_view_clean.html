@@ -1,0 +1,560 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>Game {{ game.round_number }} - {{ game.team1 }} vs {{ game.team2 }}</h2>
+            <p>Tournament: {{ game.tournament_name }} | Stage: {{ game.stage_id }}</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <button id="submitGameBtn" class="btn btn-primary" disabled>Submit Game</button>
+            <button id="saveProgressBtn" class="btn btn-secondary ms-2">Save Progress</button>
+        </div>
+    </div>
+
+    <!-- Score Display -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="h3">{{ game.team1 }}: <span id="team1Score">0</span></div>
+                        <div class="h3">{{ game.team2 }}: <span id="team2Score">0</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Player Selection -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h4>Player Selection</h4>
+            <p class="mb-0">Select which players are active for this cycle:</p>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>{{ game.team1 }}</h5>
+                    <div id="team1Players" class="mb-3">
+                        {% for player in players_team1 %}
+                        <div class="form-check">
+                            <input class="form-check-input player-checkbox" type="checkbox" 
+                                   id="player1_{{ loop.index0 }}" data-team="1" data-index="{{ loop.index0 }}" 
+                                   data-name="{{ player }}" checked>
+                            <label class="form-check-label" for="player1_{{ loop.index0 }}">
+                                {{ player }}
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h5>{{ game.team2 }}</h5>
+                    <div id="team2Players" class="mb-3">
+                        {% for player in players_team2 %}
+                        <div class="form-check">
+                            <input class="form-check-input player-checkbox" type="checkbox" 
+                                   id="player2_{{ loop.index0 }}" data-team="2" data-index="{{ loop.index0 }}" 
+                                   data-name="{{ player }}" checked>
+                            <label class="form-check-label" for="player2_{{ loop.index0 }}">
+                                {{ player }}
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Interface -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">Cycle <span id="currentCycleDisplay">1</span>/20</h4>
+            <div class="progress flex-grow-1 mx-3" style="height: 20px;">
+                <div class="progress-bar" id="progressBar" role="progressbar" style="width: 5%;"></div>
+            </div>
+        </div>
+        
+        <div class="card-body">
+            <!-- Tossup Section -->
+            <div id="tossupSection">
+                <h5 class="mb-3">Tossup Question</h5>
+                <div id="tossupQuestion" class="mb-4 p-3 bg-light rounded">
+                    <div class="question-text"></div>
+                </div>
+                
+                <div class="mb-4">
+                    <h6>Points:</h6>
+                    <div class="btn-group mb-3" role="group">
+                        <button type="button" class="btn btn-outline-secondary tossup-points" data-points="0">0 (No Answer/Neg)</button>
+                        <button type="button" class="btn btn-outline-primary tossup-points" data-points="10">10 (Correct)</button>
+                        <button type="button" class="btn btn-outline-success tossup-points" data-points="15">15 (Power)</button>
+                    </div>
+                    
+                    <div id="playerSelectionTeam1" class="player-selection mb-3" style="display: none;">
+                        <h6>{{ game.team1 }} Players:</h6>
+                        <div class="btn-group-vertical w-100">
+                            {% for player in players_team1 %}
+                            <button type="button" class="btn btn-outline-primary player-btn" 
+                                    data-team="1" data-index="{{ loop.index0 }}" data-name="{{ player }}">
+                                {{ player }}
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div id="playerSelectionTeam2" class="player-selection mb-3" style="display: none;">
+                        <h6>{{ game.team2 }} Players:</h6>
+                        <div class="btn-group-vertical w-100">
+                            {% for player in players_team2 %}
+                            <button type="button" class="btn btn-outline-primary player-btn" 
+                                    data-team="2" data-index="{{ loop.index0 }}" data-name="{{ player }}">
+                                {{ player }}
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Bonus Section -->
+            <div id="bonusSection" style="display: none;">
+                <h5 class="mb-3">Bonus Questions</h5>
+                <div id="bonusQuestions" class="mb-4">
+                    <div class="bonus-part mb-3 p-3 bg-light rounded">
+                        <div class="question-text"></div>
+                        <div class="mt-2">
+                            <button type="button" class="btn btn-outline-danger bonus-btn" data-points="0">Incorrect</button>
+                            <button type="button" class="btn btn-outline-success bonus-btn" data-points="10">Correct</button>
+                        </div>
+                    </div>
+                    <div class="bonus-part mb-3 p-3 bg-light rounded">
+                        <div class="question-text"></div>
+                        <div class="mt-2">
+                            <button type="button" class="btn btn-outline-danger bonus-btn" data-points="0">Incorrect</button>
+                            <button type="button" class="btn btn-outline-success bonus-btn" data-points="10">Correct</button>
+                        </div>
+                    </div>
+                    <div class="bonus-part mb-3 p-3 bg-light rounded">
+                        <div class="question-text"></div>
+                        <div class="mt-2">
+                            <button type="button" class="btn btn-outline-danger bonus-btn" data-points="0">Incorrect</button>
+                            <button type="button" class="btn btn-outline-success bonus-btn" data-points="10">Correct</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="d-grid gap-2">
+                    <button id="nextCycleBtn" class="btn btn-primary" disabled>Next Cycle</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scorecard Preview (Collapsible) -->
+    <div class="card">
+        <div class="card-header" data-bs-toggle="collapse" href="#scorecardCollapse" role="button">
+            <h5 class="mb-0">Scorecard Preview <small class="text-muted">(click to expand)</small></h5>
+        </div>
+        <div class="collapse" id="scorecardCollapse">
+            <div class="card-body">
+                <pre id="scorecardPreview" class="mb-0">Game not started yet</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden submit form -->
+    <form id="submitForm" method="POST" action="{{ url_for('reader.submit_game', game_id=game.id) }}" style="display: none;">
+        <input type="hidden" name="scorecard" id="scorecardInput">
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- Server data as JSON -->
+<script id="server-data" type="application/json">
+{
+    "game": {{ game|tojson|safe }},
+    "playersTeam1": {{ players_team1|tojson|safe }},
+    "playersTeam2": {{ players_team2|tojson|safe }},
+    "questions": {{ questions|tojson|safe }},
+    "bonuses": {{ bonuses|tojson|safe }},
+    "scorecard": {{ scorecard|tojson|safe if scorecard else '[]' }},
+    "tournament": {{ tournament|tojson|safe }}
+}
+</script>
+
+<script>
+// Game state and configuration
+const gameState = {
+    currentCycle: 0,
+    totalCycles: 20,
+    scorecard: {
+        cycles: []
+    },
+    config: {
+        QUESTIONS: [],
+        BONUSES: []
+    },
+    
+    // Initialize the game
+    init: function() {
+        try {
+            // Load server data
+            const serverData = JSON.parse(document.getElementById('server-data').textContent);
+            this.config.QUESTIONS = serverData.questions || [];
+            this.config.BONUSES = serverData.bonuses || [];
+            
+            // Initialize scorecard if not already loaded
+            if (serverData.scorecard && serverData.scorecard.length > 0) {
+                this.scorecard.cycles = serverData.scorecard;
+                this.currentCycle = serverData.scorecard.length - 1;
+                this.totalCycles = Math.max(this.totalCycles, this.scorecard.cycles.length);
+            } else {
+                // Initialize empty cycles
+                for (let i = 0; i < this.totalCycles; i++) {
+                    this.scorecard.cycles.push({
+                        tossup: { points: 0, team: null, player: null },
+                        bonus: [0, 0, 0],
+                        team1Players: Array(serverData.playersTeam1.length).fill(0),
+                        team2Players: Array(serverData.playersTeam2.length).fill(0)
+                    });
+                }
+            }
+            
+            // Set up event listeners
+            this.setupEventListeners();
+            
+            // Update UI
+            this.updateUI();
+            this.updateScores();
+            this.updateProgress();
+            
+            // Check for saved progress
+            this.loadSavedProgress();
+            
+        } catch (error) {
+            console.error('Error initializing game:', error);
+            alert('Error initializing game. Please refresh the page.');
+        }
+    },
+    
+    // Set up event listeners
+    setupEventListeners: function() {
+        // Tossup points
+        document.querySelectorAll('.tossup-points').forEach(btn => {
+            btn.addEventListener('click', (e) => this.handleTossupPoints(e));
+        });
+        
+        // Player selection
+        document.querySelectorAll('.player-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.handlePlayerSelection(e));
+        });
+        
+        // Bonus points
+        document.querySelectorAll('.bonus-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.handleBonusPoints(e));
+        });
+        
+        // Navigation buttons
+        document.getElementById('nextCycleBtn').addEventListener('click', () => this.nextCycle());
+        document.getElementById('saveProgressBtn').addEventListener('click', () => this.saveProgress());
+        document.getElementById('submitGameBtn').addEventListener('click', () => this.submitGame());
+    },
+    
+    // Handle tossup point selection
+    handleTossupPoints: function(e) {
+        const points = parseInt(e.target.dataset.points);
+        const currentCycle = this.scorecard.cycles[this.currentCycle];
+        
+        // Update active state
+        document.querySelectorAll('.tossup-points').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        e.target.classList.add('active');
+        
+        // Update scorecard
+        currentCycle.tossup.points = points;
+        
+        // Show player selection if points > 0
+        if (points > 0) {
+            document.getElementById('playerSelectionTeam1').style.display = 'block';
+            document.getElementById('playerSelectionTeam2').style.display = 'block';
+        } else {
+            currentCycle.tossup.team = null;
+            currentCycle.tossup.player = null;
+            this.showBonusSection();
+        }
+        
+        this.updateScorecardPreview();
+    },
+    
+    // Handle player selection
+    handlePlayerSelection: function(e) {
+        const team = parseInt(e.target.dataset.team);
+        const playerIndex = parseInt(e.target.dataset.index);
+        const playerName = e.target.dataset.name;
+        const currentCycle = this.scorecard.cycles[this.currentCycle];
+        
+        // Update active state
+        document.querySelectorAll('.player-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        e.target.classList.add('active');
+        
+        // Update scorecard
+        currentCycle.tossup.team = team;
+        currentCycle.tossup.player = playerIndex;
+        
+        // Show bonus section
+        this.showBonusSection();
+        
+        this.updateScorecardPreview();
+    },
+    
+    // Handle bonus points
+    handleBonusPoints: function(e) {
+        const points = parseInt(e.target.dataset.points);
+        const bonusPart = parseInt(e.target.closest('.bonus-part').dataset.part || '0');
+        const currentCycle = this.scorecard.cycles[this.currentCycle];
+        
+        // Update active state
+        const bonusBtns = e.target.closest('.bonus-part').querySelectorAll('.bonus-btn');
+        bonusBtns.forEach(btn => {
+            btn.classList.remove('active');
+        });
+        e.target.classList.add('active');
+        
+        // Update scorecard
+        currentCycle.bonus[bonusPart] = points;
+        
+        // Enable next cycle button if all bonus parts are answered
+        if (currentCycle.bonus.every(part => part !== null)) {
+            document.getElementById('nextCycleBtn').disabled = false;
+        }
+        
+        this.updateScorecardPreview();
+    },
+    
+    // Show bonus section and hide player selection
+    showBonusSection: function() {
+        document.getElementById('playerSelectionTeam1').style.display = 'none';
+        document.getElementById('playerSelectionTeam2').style.display = 'none';
+        document.getElementById('bonusSection').style.display = 'block';
+    },
+    
+    // Move to the next cycle
+    nextCycle: function() {
+        if (this.currentCycle < this.totalCycles - 1) {
+            this.currentCycle++;
+            this.updateUI();
+            this.saveProgress();
+            
+            // Enable submit button on last cycle
+            if (this.currentCycle === this.totalCycles - 1) {
+                document.getElementById('submitGameBtn').disabled = false;
+            }
+        }
+    },
+    
+    // Save progress to localStorage
+    saveProgress: function() {
+        try {
+            const gameId = JSON.parse(document.getElementById('server-data').textContent).game.id;
+            const progressData = {
+                scorecard: this.scorecard,
+                currentCycle: this.currentCycle,
+                timestamp: new Date().toISOString()
+            };
+            
+            localStorage.setItem(`game_${gameId}_progress`, JSON.stringify(progressData));
+            
+            // Show save confirmation
+            const saveBtn = document.getElementById('saveProgressBtn');
+            const originalText = saveBtn.textContent;
+            saveBtn.textContent = 'Saved!';
+            saveBtn.classList.add('btn-success');
+            saveBtn.classList.remove('btn-secondary');
+            
+            setTimeout(() => {
+                saveBtn.textContent = originalText;
+                saveBtn.classList.remove('btn-success');
+                saveBtn.classList.add('btn-secondary');
+            }, 2000);
+            
+        } catch (error) {
+            console.error('Error saving progress:', error);
+        }
+    },
+    
+    // Update the UI based on current game state
+    updateUI: function() {
+        // Update cycle display
+        document.getElementById('currentCycleDisplay').textContent = this.currentCycle + 1;
+        
+        // Reset UI for new cycle
+        this.resetCycleUI();
+        
+        // Load current question and bonus
+        this.loadCurrentQuestion();
+        
+        // Update progress
+        this.updateProgress();
+    },
+    
+    // Update the scores display
+    updateScores: function() {
+        let team1Score = 0;
+        let team2Score = 0;
+        
+        this.scorecard.cycles.forEach(cycle => {
+            // Tossup points
+            if (cycle.tossup.team === 1) {
+                team1Score += cycle.tossup.points || 0;
+            } else if (cycle.tossup.team === 2) {
+                team2Score += cycle.tossup.points || 0;
+            }
+            
+            // Bonus points
+            if (cycle.tossup.team !== null) {
+                const bonusPoints = cycle.bonus.reduce((sum, points) => sum + (points || 0), 0);
+                if (cycle.tossup.team === 1) {
+                    team1Score += bonusPoints;
+                } else if (cycle.tossup.team === 2) {
+                    team2Score += bonusPoints;
+                }
+            }
+        });
+        
+        // Update the UI
+        document.getElementById('team1Score').textContent = team1Score;
+        document.getElementById('team2Score').textContent = team2Score;
+    },
+    
+    // Update the progress bar
+    updateProgress: function() {
+        const progress = ((this.currentCycle + 1) / this.totalCycles) * 100;
+        const progressBar = document.getElementById('progressBar');
+        if (progressBar) {
+            progressBar.style.width = `${progress}%`;
+            progressBar.setAttribute('aria-valuenow', progress);
+        }
+    },
+    
+    // Reset UI for a new cycle
+    resetCycleUI: function() {
+        // Reset active states
+        document.querySelectorAll('.tossup-points, .player-btn, .bonus-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        // Hide player selection and bonus section
+        document.getElementById('playerSelectionTeam1').style.display = 'none';
+        document.getElementById('playerSelectionTeam2').style.display = 'none';
+        document.getElementById('bonusSection').style.display = 'none';
+        
+        // Disable next cycle button
+        document.getElementById('nextCycleBtn').disabled = true;
+    },
+    
+    // Load the current question and bonus
+    loadCurrentQuestion: function() {
+        const question = this.config.QUESTIONS[this.currentCycle];
+        const tossupQuestion = document.getElementById('tossupQuestion');
+        
+        if (tossupQuestion && question) {
+            tossupQuestion.querySelector('.question-text').textContent = question.question || 'No question available';
+        }
+        
+        const bonus = this.config.BONUSES[this.currentCycle];
+        const bonusContainer = document.getElementById('bonusQuestions');
+        
+        if (bonusContainer && bonus) {
+            bonusContainer.querySelectorAll('.bonus-part').forEach((part, index) => {
+                part.dataset.part = index;
+                part.querySelector('.question-text').textContent = bonus.parts && bonus.parts[index] 
+                    ? bonus.parts[index].question 
+                    : 'No bonus question available';
+            });
+        }
+    },
+    
+    // Submit the game
+    submitGame: function() {
+        if (confirm('Are you sure you want to submit the game? This cannot be undone.')) {
+            // Prepare the scorecard data in the required format
+            const scorecardData = this.scorecard.cycles.map(cycle => {
+                return [
+                    cycle.tossup.team === 1 ? cycle.tossup.points : 0,
+                    cycle.tossup.team === 2 ? cycle.tossup.points : 0,
+                    cycle.tossup.team === 1 ? cycle.bonus.reduce((a, b) => a + b, 0) : 0,
+                    cycle.tossup.team === 2 ? cycle.bonus.reduce((a, b) => a + b, 0) : 0,
+                    cycle.tossup.team || 0,
+                    cycle.tossup.player || 0
+                ];
+            });
+            
+            // Set the scorecard data in the hidden form field
+            document.getElementById('scorecardInput').value = JSON.stringify(scorecardData);
+            
+            // Submit the form
+            document.getElementById('submitForm').submit();
+        }
+    },
+    
+    // Load saved progress if available
+    loadSavedProgress: function() {
+        try {
+            const gameId = JSON.parse(document.getElementById('server-data').textContent).game.id;
+            const savedData = localStorage.getItem(`game_${gameId}_progress`);
+            
+            if (savedData) {
+                if (confirm('Found saved progress. Would you like to load it?')) {
+                    const progressData = JSON.parse(savedData);
+                    this.scorecard = progressData.scorecard;
+                    this.currentCycle = progressData.currentCycle;
+                    this.updateUI();
+                    this.updateScores();
+                    this.updateProgress();
+                }
+            }
+        } catch (error) {
+            console.error('Error loading saved progress:', error);
+        }
+    },
+    
+    // Update the scorecard preview
+    updateScorecardPreview: function() {
+        const preview = [];
+        this.scorecard.cycles.forEach((cycle, index) => {
+            if (cycle.tossup.team !== null) {
+                const team = cycle.tossup.team === 1 ? 'Team 1' : 'Team 2';
+                const tossupPoints = cycle.tossup.points || 0;
+                const bonusPoints = cycle.bonus.reduce((a, b) => a + b, 0);
+                preview.push(`Cycle ${index + 1}: ${team} - Tossup: ${tossupPoints}, Bonus: ${bonusPoints}`);
+            }
+        });
+        
+        document.getElementById('scorecardPreview').textContent = preview.length > 0 
+            ? preview.join('\n') 
+            : 'No cycles completed yet';
+    }
+};
+
+// Initialize the game when the DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // Initialize the game
+    gameState.init();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Round File - LIQBA{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-6">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-3xl font-bold">Upload Round File</h2>
+        <a href="{{ url_for('admin.tournament_details', tournament_id=tournament_id) }}" class="text-blue-500 hover:underline">Back to Tournament Details</a>
+    </div>
+    
+    <div class="bg-white p-6 rounded shadow">
+        <h3 class="text-xl font-semibold mb-4">Tournament: {{ tournament_name }}</h3>
+        <p class="text-gray-600 mb-6">Stage: {{ stage_id }}, Round: {{ round_number }}</p>
+        
+        <form method="post" enctype="multipart/form-data" action="{{ url_for('admin.upload_round_file', tournament_id=tournament_id, stage_id=stage_id, round_number=round_number) }}">
+            <div class="mb-3">
+                <label for="packet_file" class="form-label">Upload Packet File</label>
+                <input type="file" class="form-control" id="packet_file" name="packet_file" accept=".docx,.doc" required>
+            </div>
+            <div class="mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="has_question_numbers" name="has_question_numbers" value="y" checked>
+                    <label class="form-check-label" for="has_question_numbers">
+                        Packet has question numbers
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="has_category_tags" name="has_category_tags" value="y" checked>
+                    <label class="form-check-label" for="has_category_tags">
+                        Packet has category tags
+                    </label>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">Upload Packet</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

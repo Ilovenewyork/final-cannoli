@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Games for Tournament | LIQBA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen flex flex-col">
+  <!-- Navbar -->
+  <nav class="bg-gray-800 text-white p-4">
+    <div class="container mx-auto flex justify-between">
+      <a href="{{ url_for('index') }}" class="font-bold hover:underline">LIQBA</a>
+      <a href="{{ url_for('reader.select_tournament') }}" class="hover:underline">Back</a>
+    </div>
+  </nav>
+  
+  <!-- Main Content -->
+  <main class="container mx-auto flex-grow p-6">
+    <h2 class="text-3xl font-bold mb-6">Games for Tournament: {{ tournament.name }}</h2>
+    <!-- Two search inputs -->
+    <div class="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <input type="text" id="roundSearch" placeholder="Search by round..." class="w-full border rounded px-3 py-2">
+      <input type="text" id="teamSearch" placeholder="Search by team..." class="w-full border rounded px-3 py-2">
+    </div>
+    <!-- Group games by stage and round -->
+    {% set stage_groups = {} %}
+    {% for game in games %}
+      {% set stage_id = game.stage_id|default(1) %}
+      {% set stage_name = 'Prelims' if stage_id == 1 else ('Playoffs' if stage_id == 2 else 'Stage ' ~ stage_id) %}
+      {% set stage_round = (stage_id, game.round_number) %}
+      {% if stage_round not in stage_groups %}
+        {% set _ = stage_groups.update({stage_round: {'stage_name': stage_name, 'games': []}}) %}
+      {% endif %}
+      {% set _ = stage_groups[stage_round]['games'].append(game) %}
+    {% endfor %}
+    
+    <!-- Sort by stage_id and round_number -->
+    {% for (stage_id, round_num), group in stage_groups|dictsort %}
+      <div class="round-group mb-8" data-stage="{{ stage_id }}" data-round="{{ round_num }}">
+        <h3 class="text-2xl font-bold mb-2">{{ group.stage_name }} - Round {{ round_num }}</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {% for game in group.games %}
+            <div class="game-card bg-white p-6 rounded shadow hover:shadow-lg transition-shadow" 
+                 data-round="{{ game.round_number }}" 
+                 data-stage="{{ game.stage_id }}"
+                 data-team="{{ (game.team1 ~ ' ' ~ game.team2)|lower }}">
+              <h4 class="text-xl font-semibold mb-2">
+                <div class="flex items-center">
+                  <span class="{% if game.team1_pending %}text-blue-600{% endif %}">
+                    {{ game.team1 }}
+                    {% if game.team1_pending and game.team1_info %}
+                      <span class="text-sm font-normal text-gray-500 ml-1">(pending)</span>
+                    {% endif %}
+                  </span>
+                  <span class="mx-2 text-gray-500">vs</span>
+                  <span class="{% if game.team2_pending %}text-blue-600{% endif %}">
+                    {{ game.team2 }}
+                    {% if game.team2_pending and game.team2_info %}
+                      <span class="text-sm font-normal text-gray-500 ml-1">(pending)</span>
+                    {% endif %}
+                  </span>
+                </div>
+              </h4>
+              {% if (game.team1_pending and game.team1_info) or (game.team2_pending and game.team2_info) %}
+                <div class="text-sm text-gray-600 mb-2 p-2 bg-gray-100 rounded">
+                  {% if game.team1_pending and game.team1_info %}
+                    <div class="mb-1">
+                      <span class="font-medium">Team 1:</span> Waiting for {{ game.team1_info.team1 }} vs {{ game.team1_info.team2 }}
+                      <span class="text-xs text-gray-500">({{ game.team1_info.formatted_ref }})</span>
+                    </div>
+                  {% endif %}
+                  {% if game.team2_pending and game.team2_info %}
+                    <div>
+                      <span class="font-medium">Team 2:</span> Waiting for {{ game.team2_info.team1 }} vs {{ game.team2_info.team2 }}
+                      <span class="text-xs text-gray-500">({{ game.team2_info.formatted_ref }})</span>
+                    </div>
+                  {% endif %}
+                </div>
+              {% endif %}
+              <p class="mb-2">
+                <span class="font-medium">Status:</span>
+                {% if game.result is not none and game.result != -2 %}
+                  <span class="text-green-600 font-bold">Completed</span>
+                {% elif game.scorecard %}
+                  <span class="text-yellow-600 font-bold">In Progress</span>
+                {% else %}
+                  <span class="text-red-600 font-bold">Not Started</span>
+                {% endif %}
+              </p>
+              {% if game.result is not none and game.result != -2 %}
+                <button class="w-full bg-gray-400 text-white text-center py-2 rounded cursor-not-allowed" disabled>
+                  Game Completed
+                </button>
+              {% else %}
+                <a href="{{ url_for('reader.submit_game', game_id=game.id) }}" class="block bg-blue-500 hover:bg-blue-600 text-white text-center py-2 rounded">
+                  {% if game.scorecard %}Edit Score{% else %}Start Game{% endif %}
+                </a>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endfor %}
+  </main>
+  <script>
+    // Filter function combining round, stage, and team queries
+    function filterCards() {
+      const roundQuery = document.getElementById('roundSearch').value.trim().toLowerCase();
+      const teamQuery = document.getElementById('teamSearch').value.trim().toLowerCase();
+      const gameCards = document.querySelectorAll('.game-card');
+      let anyVisible = false;
+
+      // First hide all game cards
+      gameCards.forEach(card => {
+        card.style.display = 'none';
+      });
+
+      // Then show matching ones
+      gameCards.forEach(card => {
+        const round = card.getAttribute('data-round');
+        const stage = card.getAttribute('data-stage');
+        const teamText = card.getAttribute('data-team').toLowerCase();
+        
+        const roundMatch = !roundQuery || round.includes(roundQuery);
+        const teamMatch = !teamQuery || teamText.includes(teamQuery);
+        
+        if (roundMatch && teamMatch) {
+          card.style.display = 'block';
+          anyVisible = true;
+        }
+      });
+
+      // Show/hide round headers based on visibility of their games
+      document.querySelectorAll('.round-group').forEach(group => {
+        const hasVisibleGames = Array.from(group.querySelectorAll('.game-card'))
+          .some(card => card.style.display !== 'none');
+        
+        group.style.display = hasVisibleGames ? 'block' : 'none';
+      });
+    }
+
+    // Add event listeners
+    document.getElementById('roundSearch').addEventListener('input', filterCards);
+    document.getElementById('teamSearch').addEventListener('input', filterCards);
+  </script>
+  
+  <!-- Footer -->
+  <footer class="bg-gray-900 text-gray-300 text-center p-4">
+    Copyright madhavendra thakur for the LIQBA
+  </footer>
+</body>
+</html>

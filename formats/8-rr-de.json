@@ -1,0 +1,126 @@
+{
+    "tournament_format": {
+      "name": "8 team round robin -> double elim",
+      "description": "Example structure for any tournament with mapping from T# to real teams handled externally.",
+      "stages": [
+        {
+          "stage_id": 1,
+          "stage_name": "Preliminary Round Robin",
+          "type": "round_robin",
+          "rounds": [
+            {
+              "round_in_stage": 1,
+              "pairings": [
+                {"match_number": 1, "teams": ["T1", "T2"]},
+                {"match_number": 2, "teams": ["T3", "T4"]},
+                {"match_number": 3, "teams": ["T5", "T6"]},
+                {"match_number": 4, "teams": ["T7", "T8"]}
+              ]
+            },
+            {
+              "round_in_stage": 2,
+              "pairings": [
+                {"match_number": 1, "teams": ["T1", "T3"]},
+                {"match_number": 2, "teams": ["T2", "T4"]},
+                {"match_number": 3, "teams": ["T5", "T7"]},
+                {"match_number": 4, "teams": ["T6", "T8"]}
+              ]
+            },
+            {
+              "round_in_stage": 3,
+              "pairings": [
+                {"match_number": 1, "teams": ["T1", "T4"]},
+                {"match_number": 2, "teams": ["T2", "T3"]},
+                {"match_number": 3, "teams": ["T5", "T8"]},
+                {"match_number": 4, "teams": ["T6", "T7"]}
+              ]
+            }
+          ]
+        },
+        {
+          "stage_id": 2,
+          "stage_name": "Double Elimination Playoffs",
+          "type": "double_elimination",
+          "notes": "Seeds T1, T2, etc. refer to final standings from Stage 1.",
+          "rounds": [
+            {
+              "round_in_stage": 1,
+              "pairings": [
+                {"match_number": 1, "teams": ["T1", "T8"]},
+                {"match_number": 2, "teams": ["T4", "T5"]},
+                {"match_number": 3, "teams": ["T2", "T7"]},
+                {"match_number": 4, "teams": ["T3", "T6"]}
+              ]
+            },
+            {
+              "round_in_stage": 2,
+              "pairings": [
+                {
+                  "match_number": 1,
+                  "teams": [
+                    "W(S2R1M1)",
+                    "W(S2R1M2)"
+                  ]
+                },
+                {
+                  "match_number": 2,
+                  "teams": [
+                    "W(S2R1M3)",
+                    "W(S2R1M4)"
+                  ]
+                },
+                {
+                  "match_number": 3,
+                  "teams": [
+                    "L(S2R1M1)",
+                    "L(S2R1M2)"
+                  ]
+                },
+                {
+                  "match_number": 4,
+                  "teams": [
+                    "L(S2R1M3)",
+                    "L(S2R1M4)"
+                  ]
+                }
+              ]
+            },
+            {
+              "round_in_stage": 3,
+              "pairings": [
+                {
+                  "match_number": 1,
+                  "teams": [
+                    "W(S2R2M1)",
+                    "W(S2R2M2)"
+                  ]
+                },
+                {
+                  "match_number": 2,
+                  "teams": [
+                    "W(S2R2M3)",
+                    "W(S2R2M4)"
+                  ]
+                },
+                {
+                  "match_number": 3,
+                  "teams": [
+                    "L(S2R2M1)",
+                    "L(S2R2M2)"
+                  ]
+                },
+                {
+                  "match_number": 4,
+                  "teams": [
+                    "L(S2R2M3)",
+                    "L(S2R2M4)"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+  

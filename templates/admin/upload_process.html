@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2>Packet Upload Process</h2>
+            
+            {% if status == 'error' %}
+            <div class="alert alert-danger">
+                <h4>Error: {{ message }}</h4>
+            </div>
+            {% else %}
+            <div class="alert alert-success">
+                <h4>Success: {{ message }}</h4>
+            </div>
+            
+            <h3>Imported Questions</h3>
+            
+            <h4>Tossups ({{ tossups|length }})</h4>
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Question Text</th>
+                            <th>Answer</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tossup in tossups %}
+                        <tr>
+                            <td>{{ tossup.number }}</td>
+                            <td>{{ tossup.text }}</td>
+                            <td>{{ tossup.answer }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <h4>Bonuses ({{ bonuses|length }})</h4>
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Leadin</th>
+                            <th>Parts</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for bonus in bonuses %}
+                        <tr>
+                            <td>{{ bonus.number }}</td>
+                            <td>{{ bonus.leadin }}</td>
+                            <td>{{ bonus.parts }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="mt-4">
+                <a href="{{ url_for('admin.tournament_details', tournament_id=tournament_id) }}" class="btn btn-primary">
+                    Back to Tournament Details
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

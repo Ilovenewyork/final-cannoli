@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Team and Individual Leaderboard | LIQBA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen flex flex-col">
+  <!-- Navbar -->
+  <nav class="bg-gray-800 text-white p-4">
+    <div class="container mx-auto flex justify-between">
+      <a href="{{ url_for('index') }}" class="font-bold hover:underline">LIQBA</a>
+      <a href="/" class="hover:underline">Home</a>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="container mx-auto flex-grow p-6">
+    <section class="mb-8">
+      <h2 class="text-3xl font-bold mb-4">Overall Team Leaderboard (Ranked by Win Percentage)</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full border">
+          <thead class="bg-gray-200">
+            <tr>
+              <th class="border p-2">Rank</th>
+              <th class="border p-2">Team</th>
+              <th class="border p-2">Win%</th>
+              <th class="border p-2">PPG</th>
+              <th class="border p-2">PPB Heard</th>
+              <th class="border p-2">TU%</th>
+              <th class="border p-2">Pwr%</th>
+              <th class="border p-2">G</th>
+              <th class="border p-2">15s</th>
+              <th class="border p-2">10s</th>
+              <th class="border p-2">-5s</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in leaderboard_overall %}
+              <tr class="text-center">
+                <td class="border p-2">{{ loop.index }}</td>
+                <td class="border p-2">{{ entry.team }}</td>
+                <td class="border p-2">{{ "%.0f"|format(entry.win_record * 100) }}%</td>
+                <td class="border p-2">{{ "%.1f"|format(entry.pts_per_game) }}</td>
+                <td class="border p-2">{{ "%.2f"|format(entry.ppb_heard) if entry.bonus_heard > 0 else "0.00" }}</td>
+                <td class="border p-2">{{ "%.0f"|format(entry.tossup_conversion) }}%</td>
+                <td class="border p-2">{{ "%.0f"|format(entry.power_rate) }}%</td>
+                <td class="border p-2">{{ entry.games }}</td>
+                <td class="border p-2">{{ entry.tossups_15 }}</td>
+                <td class="border p-2">{{ entry.tossups_10 }}</td>
+                <td class="border p-2">{{ entry.tossups_neg }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    
+    <section class="mb-8">
+      <h2 class="text-3xl font-bold mb-4">Preliminary Team Leaderboard (Ranked by Win Percentage)</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full border">
+          <thead class="bg-gray-200">
+            <tr>
+              <th class="border p-2">Rank</th>
+              <th class="border p-2">Team</th>
+              <th class="border p-2">Win%</th>
+              <th class="border p-2">PPG</th>
+              <th class="border p-2">PPB Heard</th>
+              <th class="border p-2">TU%</th>
+              <th class="border p-2">Pwr%</th>
+              <th class="border p-2">G</th>
+              <th class="border p-2">15s</th>
+              <th class="border p-2">10s</th>
+              <th class="border p-2">-5s</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in leaderboard_prelim %}
+              <tr class="text-center">
+                <td class="border p-2">{{ loop.index }}</td>
+                <td class="border p-2">{{ entry.team }}</td>
+                <td class="border p-2">{{ "%.0f"|format(entry.win_record * 100) }}%</td>
+                <td class="border p-2">{{ "%.1f"|format(entry.pts_per_game) }}</td>
+                <td class="border p-2">{{ "%.2f"|format(entry.ppb_heard) if entry.bonus_heard > 0 else "0.00" }}</td>
+                <td class="border p-2">{{ "%.0f"|format(entry.tossup_conversion) }}%</td>
+                <td class="border p-2">{{ "%.0f"|format(entry.power_rate) }}%</td>
+                <td class="border p-2">{{ entry.games }}</td>
+                <td class="border p-2">{{ entry.tossups_15 }}</td>
+                <td class="border p-2">{{ entry.tossups_10 }}</td>
+                <td class="border p-2">{{ entry.tossups_neg }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    
+    <section class="mb-8">
+      <h2 class="text-3xl font-bold mb-4">Playoff Team Leaderboard (Ranked by Win Percentage)</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full border">
+          <thead class="bg-gray-200">
+            <tr>
+              <th class="border p-2">Rank</th>
+              <th class="border p-2">Team</th>
+              <th class="border p-2">Win%</th>
+              <th class="border p-2">PPG</th>
+              <th class="border p-2">PPB Heard</th>
+              <th class="border p-2">TU%</th>
+              <th class="border p-2">Pwr%</th>
+              <th class="border p-2">G</th>
+              <th class="border p-2">15s</th>
+              <th class="border p-2">10s</th>
+              <th class="border p-2">-5s</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in leaderboard_playoff %}
+              <tr class="text-center">
+                <td class="border p-2">{{ loop.index }}</td>
+                <td class="border p-2">{{ entry.team }}</td>
+                <td class="border p-2">{{ "%.0f"|format(entry.win_record * 100) }}%</td>
+                <td class="border p-2">{{ "%.1f"|format(entry.pts_per_game) }}</td>
+                <td class="border p-2">{{ "%.2f"|format(entry.ppb_heard) if entry.bonus_heard > 0 else "0.00" }}</td>
+                <td class="border p-2">{{ "%.0f"|format(entry.tossup_conversion) }}%</td>
+                <td class="border p-2">{{ "%.0f"|format(entry.power_rate) }}%</td>
+                <td class="border p-2">{{ entry.games }}</td>
+                <td class="border p-2">{{ entry.tossups_15 }}</td>
+                <td class="border p-2">{{ entry.tossups_10 }}</td>
+                <td class="border p-2">{{ entry.tossups_neg }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    
+    <section class="mb-8">
+      <h2 class="text-3xl font-bold mb-4">Individual Leaderboard (Points Per Game)</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full border">
+          <thead class="bg-gray-200">
+            <tr>
+              <th class="border p-2">Rank</th>
+              <th class="border p-2 text-left">Player</th>
+              <th class="border p-2 text-left">Team</th>
+              <th class="border p-2">Pts</th>
+              <th class="border p-2">Pts/G</th>
+              <th class="border p-2" title="Tens">10s</th>
+              <th class="border p-2" title="Powers">15s</th>
+              <th class="border p-2" title="Negs">-5s</th>
+              <th class="border p-2" title="Power Percentage">Pwr%</th>
+              <th class="border p-2" title="Tossup Conversion">TU%</th>
+              <th class="border p-2" title="Tossups Heard">Heard</th>
+              <th class="border p-2" title="Games Played">G</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for player in leaderboard_individual %}
+            <tr class="text-center hover:bg-gray-50">
+              <td class="border p-2">{{ loop.index }}</td>
+              <td class="border p-2 text-left">{{ player.player }}</td>
+              <td class="border p-2 text-left">{{ player.team }}</td>
+              <td class="border p-2">{{ player.points|int }}</td>
+              <td class="border p-2">{{ "%0.1f"|format(player.points / player.games if player.games > 0 else 0) }}</td>
+              <td class="border p-2">{{ player.tossups_10 }}</td>
+              <td class="border p-2">{{ player.tossups_15 }}</td>
+              <td class="border p-2">{{ player.tossups_neg }}</td>
+              <td class="border p-2">{{ "%0.1f"|format((player.tossups_15 / (player.tossups_10 + player.tossups_15) * 100) if (player.tossups_10 + player.tossups_15) > 0 else 0) }}%</td>
+              <td class="border p-2">{{ "%0.1f"|format(((player.tossups_10 + player.tossups_15) / player.tossups_heard * 100) if player.tossups_heard > 0 else 0) }}%</td>
+              <td class="border p-2">{{ player.tossups_heard }}</td>
+              <td class="border p-2">{{ player.games }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="12" class="border p-4 text-center text-gray-500">No individual stats available yet</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    
+    <!-- Add a link back to the schedule view -->
+    <div class="mt-8 text-center">
+      <a href="{{ url_for('public.schedule_all', tournament_id=tournament.id) }}" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded">
+        Back to Schedule
+      </a>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-gray-900 text-gray-300 text-center p-4">
+    Copyright madhavendra thakur for the LIQBA
+  </footer>
+</body>
+</html>
