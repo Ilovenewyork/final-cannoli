@@ -1,16 +1,16 @@
 # Core
-Flask==2.3.3
-Flask-SQLAlchemy==3.1.1
-Flask-Login==0.6.2
-Werkzeug==2.3.7
-Jinja2==3.1.2
-itsdangerous==2.1.2
+Flask
+Flask-SQLAlchemy
+Flask-Login
+Werkzeug
+Jinja2
+itsdangerous
 
 # Database
-SQLAlchemy==2.0.21
-alembic==1.12.1
+SQLAlchemy
+alembic
 
 # File Processing
-PyPDF2==3.0.1
-python-docx==0.8.11
+PyPDF2
+python-docx
 python-magic-bin==0.4.14; sys_platform == 'win32'
