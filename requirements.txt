@@ -5,6 +5,7 @@ Flask-Login
 Werkzeug
 Jinja2
 itsdangerous
+flask_migrate
 
 # Database
 SQLAlchemy
