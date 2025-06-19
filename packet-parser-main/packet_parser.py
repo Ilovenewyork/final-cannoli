@@ -863,6 +863,24 @@ class Parser:
     is_flag=True,
     help="Ensure powermarks are surrounded by spaces.",
 )
+def ensure_directories_exist():
+    """Ensure that all required directories exist."""
+    import os
+    from pathlib import Path
+    
+    base_dir = Path(__file__).parent
+    required_dirs = [
+        'p-docx',
+        'output',
+        'p-pdf',
+        'packets'
+    ]
+    
+    for dir_name in required_dirs:
+        dir_path = base_dir / dir_name
+        dir_path.mkdir(exist_ok=True)
+        print(f"Ensured directory exists: {dir_path}")
+
 def main(
     input_directory,
     output_directory,
@@ -875,6 +893,8 @@ def main(
     auto_insert_powermarks,
     space_powermarks,
 ):
+    # Ensure required directories exist
+    ensure_directories_exist()
     if buzzpoints and modaq:
         Logger.error("Cannot output in both buzzpoints and MODAQ formats")
         exit(1)
