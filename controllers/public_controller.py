@@ -55,7 +55,7 @@ def schedule_all(tournament_id):
     alias_dict = {alias.team_id: alias.team_name for alias in aliases}
     
     # Get all games for this tournament
-    games = Game.query.filter_by(tournament_id=tournament.id).order_by(Game.stage_id, Game.round_number, Game.match_number).all()
+    games = Game.query.filter_by(tournament_id=tournament.id).order_by(Game.stage_id, Game.round_number).all()
     
     # First pass: organize games by stage and round, and create a lookup dict for game references
     games_by_stage_round = {}
