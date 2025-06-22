@@ -73,7 +73,7 @@ def schedule_all(tournament_id):
         games_by_stage_round[stage_id][round_num].append(game)
         
         # Add to game_lookup
-        game_key = f'S{stage_id}R{round_num}M{game.match_number}'
+        game_key = f'S{stage_id}R{round_num}M{game.id}'
         game_lookup[game_key] = game
     
     # Function to resolve team name from a game reference
@@ -121,38 +121,49 @@ def schedule_all(tournament_id):
             resolved_rounds = []
             for round_num, games_in_round in sorted(games_by_stage_round[stage_id].items()):
                 matches = []
-                for game in games_in_round:
+                # Sort games by ID to ensure consistent ordering
+                sorted_games = sorted(games_in_round, key=lambda g: g.id)
+                for match_number, game in enumerate(sorted_games, 1):
                     # Resolve team names, handling game references
-                    team1_name = resolve_team_name(game.team1, game.stage_id, game.round_number, game.match_number)
+                    team1_name = resolve_team_name(game.team1, game.stage_id, game.round_number, match_number)
                     team2_name = "TBD"
                     
                     if game.team2:
-                        team2_name = resolve_team_name(game.team2, game.stage_id, game.round_number, game.match_number)
+                        team2_name = resolve_team_name(game.team2, game.stage_id, game.round_number, match_number)
                     
-                    # Get scores if they exist
-                    score1 = game.score1 if game.score1 is not None else "-"
-                    score2 = game.score2 if game.score2 is not None else "-"
+                    # Initialize default values
+                    score1 = 0
+                    score2 = 0
+                    is_completed = False
                     
-                    # Get player names for each team if available
-                    team1_players = []
-                    team2_players = []
-                    
-                    # Only show player names for completed games
-                    if game.completed and game.scorecard:
+                    # Extract scores from scorecard if available
+                    if game.scorecard:
                         try:
-                            scorecard = json.loads(game.scorecard)
-                            team1_players = [p.get('name', '') for p in scorecard.get('team1_players', [])]
-                            team2_players = [p.get('name', '') for p in scorecard.get('team2_players', [])]
-                        except:
-                            pass
+                            scorecard_data = json.loads(game.scorecard)
+                            if isinstance(scorecard_data, list) and len(scorecard_data) > 0:
+                                # Scorecard is a list of question results, calculate totals
+                                for q in scorecard_data:
+                                    if 'scores' in q and len(q['scores']) >= 4:
+                                        # Sum up the scores for team1 (index 0) and team2 (index 2)
+                                        team1_scores = q['scores'][0]
+                                        team2_scores = q['scores'][2]
+                                        if isinstance(team1_scores, list):
+                                            score1 += sum(s for s in team1_scores if isinstance(s, (int, float)))
+                                        if isinstance(team2_scores, list):
+                                            score2 += sum(s for s in team2_scores if isinstance(s, (int, float)))
+                                
+                                # Consider game completed if there are any non-zero scores
+                                is_completed = score1 > 0 or score2 > 0
+                                
+                                # Player names are not being displayed
+                        except Exception as e:
+                            print(f"Error parsing scorecard: {e}")
                     
                     matches.append({
-                        'match_number': game.match_number,
+                        'match_number': match_number,
                         'teams': [team1_name, team2_name],
                         'scores': [score1, score2],
-                        'completed': game.completed,
-                        'team1_players': team1_players,
-                        'team2_players': team2_players
+                        'completed': is_completed
                     })
                 
                 resolved_rounds.append({
@@ -350,7 +361,9 @@ def team_leaderboard(tournament_id):
         for team, s in stats.items():
             games_played = s["games"]
             win_record = s["win_score"] / games_played if games_played else 0
-            pts_per_game = s["points"] / games_played if games_played else 0
+            # Include both tossup and bonus points in PPG
+            total_points = s["points"] + s["bonus_points"]
+            pts_per_game = total_points / games_played if games_played else 0
             bonus_eff = (s["bonus_points"] / s["bonus_count"]) if s["bonus_count"] else 0
             lb.append({
                 "team": team,

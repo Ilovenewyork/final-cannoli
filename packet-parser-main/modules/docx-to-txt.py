@@ -26,18 +26,20 @@ def parse_paragraph(paragraph: docx.text.paragraph.Paragraph) -> str:
 def main(input_file, output_file):
     doc = docx.Document(input_file)
     with open(output_file, "w", encoding="utf-8") as f:
-        for item in doc.iter_inner_content():
-            if isinstance(item, docx.text.paragraph.Paragraph):
-                line = parse_paragraph(item)
-                if line:
-                    f.write(line + "\n")
-            else:
-                for row in item.rows:
-                    for cell in row.cells:
-                        for paragraph in cell.paragraphs:
-                            line = parse_paragraph(paragraph)
-                            if line:
-                                f.write(line + "\n")
+        # Process all paragraphs in the document
+        for para in doc.paragraphs:
+            line = parse_paragraph(para)
+            if line:
+                f.write(line + "\n")
+                
+        # Process tables
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for para in cell.paragraphs:
+                        line = parse_paragraph(para)
+                        if line:
+                            f.write(line + "\n")
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:

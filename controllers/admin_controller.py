@@ -1272,55 +1272,123 @@ def upload_round_file(tournament_id, stage_id, round_number):
                 
             print(f"Successfully processed document. Output: {output_file}")
             
-            # Run packet_parser.py with -f flag and answer prompts
-            parser_script = parser_dir / 'packet_parser.py'
+            # Import the packet_parser module directly instead of running as subprocess
+            import sys
+            import os
             
-            # Make sure the file exists and is accessible
-            if not parser_script.exists():
-                raise FileNotFoundError(f"packet_parser.py not found at {parser_script}")
+            # Store the current working directory
+            original_cwd = os.getcwd()
             
-            # Make sure the input file exists
-            if not file_path.exists():
-                raise FileNotFoundError(f"Input file not found at {file_path}")
+            try:
+                # Change to the parser directory to ensure relative imports work
+                os.chdir(str(parser_dir))
                 
-            print(f"Input file exists: {file_path.exists()}, size: {file_path.stat().st_size} bytes")
-            print(f"\n=== Running packet_parser.py ===")
-            print(f"Script path: {parser_script}")
-            print(f"Working directory: {parser_dir}")
-            
-            process = subprocess.Popen(
-                ['python', str(parser_script), '-f'],
-                cwd=str(parser_dir),  # Convert to string for Windows compatibility
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                shell=True  # Required for Windows to find python
-            )
-            
-            # Answer the prompts
-            has_q_nums = 'y' if request.form.get('has_question_numbers') == 'y' else 'n'
-            has_cats = 'y' if request.form.get('has_category_tags') == 'y' else 'n'
-            
-            print(f"Sending answers to prompts: question_numbers={has_q_nums}, category_tags={has_cats}")
-            stdout, stderr = process.communicate(input=f"{has_q_nums}\n{has_cats}\n")
-            
-            print(f"\npacket_parser.py stdout:\n{stdout}")
-            if stderr:
-                print(f"\npacket_parser.py stderr:\n{stderr}")
-            print(f"packet_parser.py return code: {process.returncode}")
-            
-            if process.returncode != 0:
-                error_msg = f"packet_parser.py failed with return code {process.returncode}: {stderr}"
-                print(f"ERROR: {error_msg}")
-                raise Exception(error_msg)
-            
-            if process.returncode != 0:
-                raise Exception(f"packet_parser.py failed: {stderr}")
+                # Add the parser directory to the Python path
+                sys.path.insert(0, str(parser_dir))
+                
+                    # Import the Parser class directly
+                from packet_parser import Parser, ensure_directories_exist
+                
+                # Set up input and output directories with absolute paths
+                input_dir = os.path.abspath(packets_dir)  # Where we saved the .txt file
+                output_dir = os.path.abspath(output_dir)  # Where we want the JSON output
+                
+                # Get the settings from the form
+                has_question_numbers = request.form.get('has_question_numbers') == 'y'
+                has_category_tags = request.form.get('has_category_tags') == 'y'
+                
+                print(f"\n=== Running packet_parser ===")
+                print(f"Input directory: {input_dir}")
+                print(f"Output directory: {output_dir}")
+                print(f"Has question numbers: {has_question_numbers}")
+                print(f"Has category tags: {has_category_tags}")
+                
+                # Verify the input directory exists and has files
+                if not os.path.exists(input_dir):
+                    raise FileNotFoundError(f"Input directory not found: {input_dir}")
+                
+                input_files = os.listdir(input_dir)
+                print(f"Found {len(input_files)} files in input directory")
+                if not input_files:
+                    raise FileNotFoundError(f"No files found in input directory: {input_dir}")
+                
+                # Ensure output directory exists
+                os.makedirs(output_dir, exist_ok=True)
+                
+                # Set up the parser configuration
+                bonus_length = 3  # Default value
+                always_classify = not has_category_tags  # If no category tags, we'll need to classify
+                buzzpoints = False
+                classify_unknown = True
+                modaq = False
+                auto_insert_powermarks = True
+                space_powermarks = False
+                
+                # Create the parser instance
+                parser = Parser(
+                    has_question_numbers=has_question_numbers,
+                    has_category_tags=has_category_tags,
+                    bonus_length=bonus_length,
+                    buzzpoints=buzzpoints,
+                    modaq=modaq,
+                    auto_insert_powermarks=auto_insert_powermarks,
+                    classify_unknown=classify_unknown,
+                    space_powermarks=space_powermarks,
+                    always_classify=always_classify,
+                    constant_subcategory="",
+                    constant_alternate_subcategory=""
+                )
+                
+                # Process each input file
+                for filename in sorted(os.listdir(input_dir)):
+                    if filename == ".DS_Store":
+                        continue
+                        
+                    input_path = os.path.join(input_dir, filename)
+                    output_filename = os.path.splitext(filename)[0] + ".json"
+                    output_path = os.path.join(output_dir, output_filename)
+                    
+                    print(f"Processing {filename} -> {output_filename}")
+                    
+                    # Read the input file
+                    with open(input_path, 'r', encoding='utf-8') as f:
+                        packet_text = f.read()
+                    
+                    # Parse the packet
+                    try:
+                        packet = parser.parse_packet(packet_text, filename)
+                        
+                        # Write the output
+                        with open(output_path, 'w', encoding='utf-8') as f:
+                            json.dump(packet, f, indent=2, ensure_ascii=False)
+                        
+                        print(f"Successfully processed {filename}")
+                    except Exception as e:
+                        print(f"Error processing {filename}: {str(e)}")
+                        raise
+                
+                print("Packet parsing completed successfully")
+                
+            except Exception as e:
+                # Restore the original working directory before re-raising
+                os.chdir(original_cwd)
+                print(f"Error in packet parsing: {str(e)}", file=sys.stderr)
+                print(f"Current working directory: {os.getcwd()}", file=sys.stderr)
+                print(f"Parser directory: {parser_dir}", file=sys.stderr)
+                print(f"Input directory: {packets_dir}", file=sys.stderr)
+                print(f"Output directory: {output_dir}", file=sys.stderr)
+                raise Exception(f"Packet parsing failed: {str(e)}")
+            finally:
+                # Always restore the original working directory
+                os.chdir(original_cwd)
             
             # Find the output JSON file
             print(f"\n=== Looking for output JSON ===")
-            output_files = list(output_dir.glob('*.json'))
+            import glob
+            
+            # Convert output_dir to string for glob
+            output_dir_str = str(output_dir)
+            output_files = glob.glob(os.path.join(output_dir_str, '*.json'))
             print(f"Found {len(output_files)} JSON files in {output_dir}:")
             for f in output_files:
                 print(f"  - {f}")
@@ -1330,25 +1398,33 @@ def upload_round_file(tournament_id, stage_id, round_number):
                 print(f"ERROR: {error_msg}")
                 print(f"Contents of {output_dir}:")
                 try:
-                    for f in output_dir.iterdir():
-                        print(f"  - {f.name} (size: {f.stat().st_size} bytes)")
+                    for f in os.listdir(output_dir_str):
+                        f_path = os.path.join(output_dir_str, f)
+                        if os.path.isfile(f_path):
+                            print(f"  - {f} (size: {os.path.getsize(f_path)} bytes)")
                 except Exception as e:
                     print(f"Could not list output directory: {e}")
                 raise Exception(error_msg)
-                
-            # Read and process the JSON
-            output_file = output_files[0]
-            print(f"\n=== Processing JSON file: {output_file} ===")
-            print(f"File size: {output_file.stat().st_size} bytes")
             
+            # Process the first JSON file found
+            json_file = output_files[0]
+            print(f"Processing JSON file: {json_file}")
+            
+            # Read and parse the JSON file
             try:
-                with open(output_file, 'r', encoding='utf-8') as f:
+                with open(json_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                 print(f"Successfully loaded JSON with {len(data.get('tossups', []))} tossups and {len(data.get('bonuses', []))} bonuses")
+                
+                # Process the JSON data
+                tossups = data.get('tossups', [])
+                bonuses = data.get('bonuses', [])
+                
+                print(f"Found {len(tossups)} tossups and {len(bonuses)} bonuses in the JSON file")
             except json.JSONDecodeError as e:
                 print(f"ERROR: Failed to parse JSON: {e}")
                 print("File content (first 500 chars):")
-                with open(output_file, 'r', encoding='utf-8', errors='replace') as f:
+                with open(json_file, 'r', encoding='utf-8', errors='replace') as f:
                     print(f.read(500) + ("..." if len(f.read(501)) > 500 else ""))
                 raise
             
@@ -1468,24 +1544,47 @@ def upload_round_file(tournament_id, stage_id, round_number):
         finally:
             # Clean up the temporary files
             try:
+                import os
+                from pathlib import Path
+                
                 # Remove the uploaded file
-                if 'file_path' in locals() and file_path and file_path.exists():
-                    file_path.unlink()
+                if 'file_path' in locals() and file_path and os.path.exists(str(file_path)):
+                    try:
+                        os.unlink(str(file_path))
+                    except Exception as e:
+                        current_app.logger.warning(f"Could not remove {file_path}: {e}")
                 
                 # Clean up the parser directories
-                if 'p_docx_dir' in locals() and p_docx_dir and p_docx_dir.exists():
-                    for f in p_docx_dir.glob('*'):
+                if 'p_docx_dir' in locals() and p_docx_dir:
+                    p_docx_path = str(p_docx_dir)
+                    if os.path.exists(p_docx_path) and os.path.isdir(p_docx_path):
                         try:
-                            f.unlink()
+                            for f in os.listdir(p_docx_path):
+                                try:
+                                    file_path = os.path.join(p_docx_path, f)
+                                    if os.path.isfile(file_path):
+                                        os.unlink(file_path)
+                                except Exception as e:
+                                    current_app.logger.warning(f"Could not remove {file_path}: {e}")
                         except Exception as e:
-                            current_app.logger.warning(f"Could not remove {f}: {e}")
+                            current_app.logger.warning(f"Could not list directory {p_docx_path}: {e}")
                 
-                if 'output_dir' in locals() and output_dir and output_dir.exists():
-                    for f in output_dir.glob('*'):
+                if 'output_dir' in locals() and output_dir:
+                    output_path = str(output_dir)
+                    if os.path.exists(output_path) and os.path.isdir(output_path):
                         try:
-                            f.unlink()
+                            for f in os.listdir(output_path):
+                                try:
+                                    file_path = os.path.join(output_path, f)
+                                    if os.path.isfile(file_path) and file_path.endswith('.json'):
+                                        # Don't delete JSON files as they may be needed
+                                        continue
+                                    if os.path.isfile(file_path):
+                                        os.unlink(file_path)
+                                except Exception as e:
+                                    current_app.logger.warning(f"Could not remove {file_path}: {e}")
                         except Exception as e:
-                            current_app.logger.warning(f"Could not remove {f}: {e}")
+                            current_app.logger.warning(f"Could not list directory {output_path}: {e}")
             except Exception as e:
                 current_app.logger.error(f"Error during cleanup: {e}", exc_info=True)
     
