@@ -1198,20 +1198,36 @@ def upload_round_file(tournament_id, stage_id, round_number):
             print(f"Saving to: {file_path}")
             
             try:
-                # Ensure the directory exists
+                # Ensure the directory exists with proper permissions
                 file_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                # Set directory permissions (rwxr-xr-x)
+                os.chmod(file_path.parent, 0o755)
                 
                 # Save the file content
                 file.save(str(file_path))
+                
+                # Set file permissions (rw-r--r--)
+                os.chmod(file_path, 0o644)
+                
                 print(f"File saved successfully: {file_path}")
+                print(f"File size: {file_path.stat().st_size} bytes")
+                print(f"File permissions: {oct(file_path.stat().st_mode)[-3:]}")
                 
                 # Verify the file was saved
                 if not file_path.exists() or file_path.stat().st_size == 0:
-                    raise IOError(f"Failed to save file or file is empty: {file_path}")
+                    error_msg = f"Failed to save file or file is empty: {file_path}"
+                    print(error_msg)
+                    raise IOError(error_msg)
                     
             except Exception as e:
-                print(f"Error saving file: {e}")
-                raise
+                error_msg = f"Error saving file: {str(e)}"
+                print(error_msg)
+                print(f"File path: {file_path}")
+                print(f"Parent directory exists: {file_path.parent.exists()}")
+                if file_path.parent.exists():
+                    print(f"Parent directory permissions: {oct(file_path.parent.stat().st_mode)[-3:]}")
+                raise Exception(error_msg) from e
             
             # Set up the environment for the script
             env = os.environ.copy()
@@ -1242,14 +1258,22 @@ def upload_round_file(tournament_id, stage_id, round_number):
             # Prepare the output filename
             output_file = packets_dir / f"{file_path.stem}.txt"
             
-            # Run the script
+            # Add debug information
+            print(f"\n=== Debug Information ===")
+            print(f"Current working directory: {os.getcwd()}")
+            print(f"Script path: {docx_to_txt_script}")
+            print(f"Input file: {file_path}")
+            print(f"Output file: {output_file}")
+            print(f"File exists: {file_path.exists()}")
+            print(f"File size: {file_path.stat().st_size if file_path.exists() else 0} bytes")
+            
+            # Run the script with python3 explicitly and without shell=True
             process = subprocess.Popen(
-                ['python', str(docx_to_txt_script), str(file_path), str(output_file)],
+                ['python3', str(docx_to_txt_script), str(file_path), str(output_file)],
                 cwd=str(parser_dir),  # Set working directory to parser_dir
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                shell=True,  # Required for Windows to find python
                 env=env      # Pass the environment with PYTHONPATH
             )
             
