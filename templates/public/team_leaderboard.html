@@ -2,142 +2,150 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Team and Individual Leaderboard | LIQBA</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ tournament.name }} - Leaderboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .nav-tabs .nav-link { cursor: pointer; }
+    .nav-tabs .nav-link.active {
+      border-bottom: 2px solid #3b82f6;
+      color: #3b82f6;
+      font-weight: 500;
+    }
+  </style>
 </head>
-<body class="min-h-screen flex flex-col">
+<body class="bg-gray-100">
   <!-- Navbar -->
-  <nav class="bg-gray-800 text-white p-4">
-    <div class="container mx-auto flex justify-between">
-      <a href="{{ url_for('index') }}" class="font-bold hover:underline">LIQBA</a>
-      <a href="/" class="hover:underline">Home</a>
+  <nav class="bg-blue-800 text-white shadow-lg">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16">
+        <div class="flex items-center">
+          <a href="{{ url_for('public.schedule_all', tournament_id=tournament.id) }}" class="text-xl font-bold">{{ tournament.name }}</a>
+        </div>
+        <div class="flex items-center space-x-4">
+          <a href="{{ url_for('public.schedule_all', tournament_id=tournament.id) }}" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-blue-700">Tournament Home</a>
+        </div>
+      </div>
     </div>
   </nav>
 
   <!-- Main Content -->
-  <main class="container mx-auto flex-grow p-6">
-    <section class="mb-8">
-      <h2 class="text-3xl font-bold mb-4">Overall Team Leaderboard (Ranked by Win Percentage)</h2>
-      <div class="overflow-x-auto">
-        <table class="w-full border">
-          <thead class="bg-gray-200">
-            <tr>
-              <th class="border p-2">Rank</th>
-              <th class="border p-2">Team</th>
-              <th class="border p-2">Win%</th>
-              <th class="border p-2">PPG</th>
-              <th class="border p-2">PPB Heard</th>
-              <th class="border p-2">TU%</th>
-              <th class="border p-2">Pwr%</th>
-              <th class="border p-2">G</th>
-              <th class="border p-2">15s</th>
-              <th class="border p-2">10s</th>
-              <th class="border p-2">-5s</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for entry in leaderboard_overall %}
-              <tr class="text-center">
-                <td class="border p-2">{{ loop.index }}</td>
-                <td class="border p-2">{{ entry.team }}</td>
-                <td class="border p-2">{{ "%.0f"|format(entry.win_record * 100) }}%</td>
-                <td class="border p-2">{{ "%.1f"|format(entry.pts_per_game) }}</td>
-                <td class="border p-2">{{ "%.2f"|format(entry.ppb_heard) if entry.bonus_heard > 0 else "0.00" }}</td>
-                <td class="border p-2">{{ "%.0f"|format(entry.tossup_conversion) }}%</td>
-                <td class="border p-2">{{ "%.0f"|format(entry.power_rate) }}%</td>
-                <td class="border p-2">{{ entry.games }}</td>
-                <td class="border p-2">{{ entry.tossups_15 }}</td>
-                <td class="border p-2">{{ entry.tossups_10 }}</td>
-                <td class="border p-2">{{ entry.tossups_neg }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+  <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+    <div class="px-4 py-6 sm:px-0">
+      <h1 class="text-3xl font-bold text-gray-900 mb-6">Tournament Leaderboard</h1>
+      
+      <!-- Tabs -->
+      <div class="border-b border-gray-200 mb-6">
+        <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+          <a href="#" class="nav-link active py-4 px-1 border-b-2 font-medium text-sm" data-tab="teams">
+            Team Standings
+          </a>
+          <a href="#" class="nav-link py-4 px-1 border-b-2 font-medium text-sm" data-tab="players">
+            Player Stats
+          </a>
+        </nav>
       </div>
-    </section>
-    
-    <section class="mb-8">
-      <h2 class="text-3xl font-bold mb-4">Preliminary Team Leaderboard (Ranked by Win Percentage)</h2>
-      <div class="overflow-x-auto">
-        <table class="w-full border">
-          <thead class="bg-gray-200">
-            <tr>
-              <th class="border p-2">Rank</th>
-              <th class="border p-2">Team</th>
-              <th class="border p-2">Win%</th>
-              <th class="border p-2">PPG</th>
-              <th class="border p-2">PPB Heard</th>
-              <th class="border p-2">TU%</th>
-              <th class="border p-2">Pwr%</th>
-              <th class="border p-2">G</th>
-              <th class="border p-2">15s</th>
-              <th class="border p-2">10s</th>
-              <th class="border p-2">-5s</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for entry in leaderboard_prelim %}
-              <tr class="text-center">
-                <td class="border p-2">{{ loop.index }}</td>
-                <td class="border p-2">{{ entry.team }}</td>
-                <td class="border p-2">{{ "%.0f"|format(entry.win_record * 100) }}%</td>
-                <td class="border p-2">{{ "%.1f"|format(entry.pts_per_game) }}</td>
-                <td class="border p-2">{{ "%.2f"|format(entry.ppb_heard) if entry.bonus_heard > 0 else "0.00" }}</td>
-                <td class="border p-2">{{ "%.0f"|format(entry.tossup_conversion) }}%</td>
-                <td class="border p-2">{{ "%.0f"|format(entry.power_rate) }}%</td>
-                <td class="border p-2">{{ entry.games }}</td>
-                <td class="border p-2">{{ entry.tossups_15 }}</td>
-                <td class="border p-2">{{ entry.tossups_10 }}</td>
-                <td class="border p-2">{{ entry.tossups_neg }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <!-- Teams Tab Content -->
+      <div id="teams" class="tab-content active">
+        <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+          <div class="px-4 py-5 sm:px-6">
+            <h2 class="text-lg leading-6 font-medium text-gray-900">Team Standings</h2>
+            <p class="mt-1 max-w-2xl text-sm text-gray-500">Overall team performance and statistics</p>
+          </div>
+          <div class="border-t border-gray-200">
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
+                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">W-L-T</th>
+                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Win %</th>
+                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">PPG</th>
+                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">PPB</th>
+                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">GP</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  {% for team in teams %}
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ loop.index }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ team.team }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
+                      <span class="text-green-600 font-medium">{{ team.wins }}</span>-
+                      <span class="text-red-600 font-medium">{{ team.losses }}</span>
+                      {% if team.ties > 0 %}-<span class="text-gray-600 font-medium">{{ team.ties }}</span>{% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">{{ "%.1f"|format(team.win_percentage) }}%</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-center text-gray-900">{{ "%.1f"|format(team.points_per_game) }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">
+                      {% if team.cycle_wins > 0 %}{{ "%.2f"|format(team.bonus_points / team.cycle_wins) }}{% else %}0.00{% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">{{ team.games_played }}</td>
+                  </tr>
+                  {% else %}
+                  <tr>
+                    <td colspan="9" class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">No team data available</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
-    </section>
     
-    <section class="mb-8">
-      <h2 class="text-3xl font-bold mb-4">Playoff Team Leaderboard (Ranked by Win Percentage)</h2>
-      <div class="overflow-x-auto">
-        <table class="w-full border">
-          <thead class="bg-gray-200">
-            <tr>
-              <th class="border p-2">Rank</th>
-              <th class="border p-2">Team</th>
-              <th class="border p-2">Win%</th>
-              <th class="border p-2">PPG</th>
-              <th class="border p-2">PPB Heard</th>
-              <th class="border p-2">TU%</th>
-              <th class="border p-2">Pwr%</th>
-              <th class="border p-2">G</th>
-              <th class="border p-2">15s</th>
-              <th class="border p-2">10s</th>
-              <th class="border p-2">-5s</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for entry in leaderboard_playoff %}
-              <tr class="text-center">
-                <td class="border p-2">{{ loop.index }}</td>
-                <td class="border p-2">{{ entry.team }}</td>
-                <td class="border p-2">{{ "%.0f"|format(entry.win_record * 100) }}%</td>
-                <td class="border p-2">{{ "%.1f"|format(entry.pts_per_game) }}</td>
-                <td class="border p-2">{{ "%.2f"|format(entry.ppb_heard) if entry.bonus_heard > 0 else "0.00" }}</td>
-                <td class="border p-2">{{ "%.0f"|format(entry.tossup_conversion) }}%</td>
-                <td class="border p-2">{{ "%.0f"|format(entry.power_rate) }}%</td>
-                <td class="border p-2">{{ entry.games }}</td>
-                <td class="border p-2">{{ entry.tossups_15 }}</td>
-                <td class="border p-2">{{ entry.tossups_10 }}</td>
-                <td class="border p-2">{{ entry.tossups_neg }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <!-- Players Tab Content -->
+      <div id="players" class="tab-content">
+        <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+          <div class="px-4 py-5 sm:px-6">
+            <h2 class="text-lg leading-6 font-medium text-gray-900">Player Statistics</h2>
+            <p class="mt-1 max-w-2xl text-sm text-gray-500">Individual player performance and statistics</p>
+          </div>
+          <div class="border-t border-gray-200">
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Player</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
+                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">PPTH</th>
+                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">TU Pts</th>
+                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">TU Heard</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  {% for player in players %}
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ loop.index }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ player.name }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ player.team }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-center font-medium text-blue-600">
+                      {{ "%.2f"|format(player.ppth) }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">
+                      {{ player.tossup_points }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">
+                      {{ player.tossups_heard }}
+                    </td>
+                  </tr>
+                  {% else %}
+                  <tr>
+                    <td colspan="6" class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">No player data available</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
-    </section>
     
-    <section class="mb-8">
+    <!-- <section class="mb-8">
       <h2 class="text-3xl font-bold mb-4">Individual Leaderboard (Points Per Game)</h2>
       <div class="overflow-x-auto">
         <table class="w-full border">
@@ -158,30 +166,42 @@
             </tr>
           </thead>
           <tbody>
-            {% for player in leaderboard_individual %}
-            <tr class="text-center hover:bg-gray-50">
-              <td class="border p-2">{{ loop.index }}</td>
-              <td class="border p-2 text-left">{{ player.player }}</td>
-              <td class="border p-2 text-left">{{ player.team }}</td>
-              <td class="border p-2">{{ player.points|int }}</td>
-              <td class="border p-2">{{ "%0.1f"|format(player.points / player.games if player.games > 0 else 0) }}</td>
-              <td class="border p-2">{{ player.tossups_10 }}</td>
-              <td class="border p-2">{{ player.tossups_15 }}</td>
-              <td class="border p-2">{{ player.tossups_neg }}</td>
-              <td class="border p-2">{{ "%0.1f"|format((player.tossups_15 / (player.tossups_10 + player.tossups_15) * 100) if (player.tossups_10 + player.tossups_15) > 0 else 0) }}%</td>
-              <td class="border p-2">{{ "%0.1f"|format(((player.tossups_10 + player.tossups_15) / player.tossups_heard * 100) if player.tossups_heard > 0 else 0) }}%</td>
-              <td class="border p-2">{{ player.tossups_heard }}</td>
-              <td class="border p-2">{{ player.games }}</td>
-            </tr>
+            {% if leaderboard_individual %}
+              {% for player in leaderboard_individual %}
+              <tr class="text-center hover:bg-gray-50">
+                <td class="border p-2">{{ loop.index }}</td>
+                <td class="border p-2 text-left">{{ player['name'] or 'Unknown Player' }}</td>
+                <td class="border p-2 text-left">{{ player['team'] or 'Unknown Team' }}</td>
+                <td class="border p-2">{{ player.get('points', 0)|int }}</td>
+                <td class="border p-2">{{ "%0.1f"|format(player.get('points_ppg', 0)) }}</td>
+                <td class="border p-2">{{ player.get('tossups_10', 0) }}</td>
+                <td class="border p-2">{{ player.get('tossups_15', 0) }}</td>
+                <td class="border p-2">{{ player.get('tossups_neg', 0) }}</td>
+                <td class="border p-2">
+                  {{ "%0.1f"|format(
+                    (player.get('tossups_15', 0) / (player.get('tossups_10', 0) + player.get('tossups_15', 0)) * 100) 
+                    if (player.get('tossups_10', 0) + player.get('tossups_15', 0)) > 0 else 0
+                  ) }}%
+                </td>
+                <td class="border p-2">
+                  {{ "%0.1f"|format(
+                    ((player.get('tossups_10', 0) + player.get('tossups_15', 0)) / player.get('tossups_heard', 1) * 100) 
+                    if player.get('tossups_heard', 0) > 0 else 0
+                  ) }}%
+                </td>
+                <td class="border p-2">{{ player.get('tossups_heard', 0) }}</td>
+                <td class="border p-2">{{ player.get('games_played', 0) }}</td>
+              </tr>
+              {% endfor %}
             {% else %}
-            <tr>
-              <td colspan="12" class="border p-4 text-center text-gray-500">No individual stats available yet</td>
-            </tr>
-            {% endfor %}
+              <tr>
+                <td colspan="12" class="border p-4 text-center text-gray-500">No individual stats available yet</td>
+              </tr>
+            {% endif %}
           </tbody>
         </table>
       </div>
-    </section>
+    </section> -->
     
     <!-- Add a link back to the schedule view -->
     <div class="mt-8 text-center">
@@ -189,11 +209,47 @@
         Back to Schedule
       </a>
     </div>
-  </main>
+    </div>
+  </div>
 
-  <!-- Footer -->
-  <footer class="bg-gray-900 text-gray-300 text-center p-4">
-    Copyright madhavendra thakur for the LIQBA
+  <footer class="bg-gray-900 text-gray-300 py-8 mt-auto">
+    <div class="container mx-auto px-4 text-center">
+      <p>© 2025 LIQBA - All rights reserved</p>
+      <p class="text-sm text-gray-500 mt-2">Made with ❤️ by Madhavendra Thakur</p>
+    </div>
   </footer>
+
+  <script>
+    // Tab switching functionality
+    document.addEventListener('DOMContentLoaded', function() {
+      const tabs = document.querySelectorAll('.nav-link');
+      const tabContents = document.querySelectorAll('.tab-content');
+
+      tabs.forEach(tab => {
+        tab.addEventListener('click', function(e) {
+          e.preventDefault();
+          
+          // Remove active class from all tabs and contents
+          tabs.forEach(t => t.classList.remove('active'));
+          tabContents.forEach(content => content.classList.remove('active'));
+          
+          // Add active class to clicked tab and corresponding content
+          this.classList.add('active');
+          const tabId = this.getAttribute('data-tab');
+          document.getElementById(tabId).classList.add('active');
+        });
+      });
+
+      // Activate the first tab by default
+      if (tabs.length > 0) {
+        tabs[0].classList.add('active');
+        const defaultTabId = tabs[0].getAttribute('data-tab');
+        if (defaultTabId) {
+          const defaultTab = document.getElementById(defaultTabId);
+          if (defaultTab) defaultTab.classList.add('active');
+        }
+      }
+    });
+  </script>
 </body>
 </html>

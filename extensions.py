@@ -30,6 +30,21 @@ def init_extensions(app):
     with app.app_context():
         # Import models inside app context to avoid circular imports
         from models import tournament, game, admin, question, team_alias, player
+        from sqlalchemy import inspect, text
+        
+        # Check if the admin table has needs_password_change column
+        inspector = inspect(db.engine)
+        columns = [col['name'] for col in inspector.get_columns('admin')]
+        
+        # Add missing column if needed
+        if 'needs_password_change' not in columns:
+            try:
+                with db.engine.connect() as conn:
+                    conn.execute(text('ALTER TABLE admin ADD COLUMN needs_password_change BOOLEAN DEFAULT TRUE NOT NULL'))
+                    conn.commit()
+                print("Added missing column: needs_password_change")
+            except Exception as e:
+                print(f"Error adding column: {e}")
         
         # Create tables if they don't exist
         db.create_all()
@@ -38,7 +53,8 @@ def init_extensions(app):
         from models.admin import Admin
         if not Admin.query.filter_by(username='admin').first():
             admin_user = Admin(username='admin')
-            admin_user.set_password('admin')
+            admin_user.set_password('password')  # Using 'password' as the default
+            admin_user.needs_password_change = True
             db.session.add(admin_user)
             try:
                 db.session.commit()

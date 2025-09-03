@@ -1,11 +1,15 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app, jsonify
+from flask_login import login_required, current_user, login_user, logout_user
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, SubmitField, SelectField, validators
+from wtforms.validators import DataRequired
 from extensions import db
-from models import Tournament, TeamAlias, Game, Player, Question, Admin
+from models import Tournament, TeamAlias, Game, Player, Question, Admin, Reader, ReaderTournament, Alert
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from functools import wraps
 from werkzeug.utils import secure_filename
-from sqlalchemy import text, inspect
+from sqlalchemy import text, inspect, or_
 import subprocess
 import shutil
 import tempfile
@@ -22,7 +26,7 @@ def create_dummy_admin():
         admin = Admin.query.filter_by(username='admin').first()
         if not admin:
             admin = Admin(username='admin')
-            admin.set_password('admin')
+            admin.set_password('password')  # Default password
             db.session.add(admin)
             db.session.commit()
     except Exception as e:
@@ -39,23 +43,43 @@ def admin_login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+class AdminLoginForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired()])
+    password = PasswordField('Password', validators=[DataRequired()])
+    submit = SubmitField('Sign in')
+
 @admin_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+    # If user is already logged in, redirect to dashboard
+    if 'admin_id' in session:
+        admin = Admin.query.get(session['admin_id'])
+        if admin:
+            if admin.needs_password_change:
+                return redirect(url_for('admin.change_password'))
+            return redirect(url_for('admin.dashboard'))
+    
+    form = AdminLoginForm()
+    if form.validate_on_submit():
+        username = form.username.data
+        password = form.password.data
         
-        if not username or not password:
-            flash('Please provide both username and password', 'danger')
-            return render_template('login.html')
-            
         try:
             admin = Admin.query.filter_by(username=username).first()
             if admin and admin.check_password(password):
+                login_user(admin)
                 session['admin_id'] = admin.id
                 session.permanent = True  # Make the session persistent
+                
+                # Check if password needs to be changed
+                if admin.needs_password_change:
+                    flash('You must change your password before continuing.', 'warning')
+                    return redirect(url_for('admin.change_password'))
+                
                 flash('Login successful!', 'success')
-                return redirect(url_for('admin.dashboard'))
+                
+                # Redirect to the dashboard or the originally requested page
+                next_page = request.args.get('next')
+                return redirect(next_page or url_for('admin.dashboard'))
             else:
                 flash('Invalid username or password', 'danger')
         except Exception as e:
@@ -63,12 +87,12 @@ def login():
             db.session.rollback()
             flash('An error occurred during login. Please try again.', 'danger')
     
-    # If GET request or login failed, show login page
-    return render_template('login.html')
+    return render_template('admin/login.html', form=form)
 
 @admin_bp.route('/dashboard', methods=['GET', 'POST'], endpoint='dashboard')
 @admin_login_required
 def dashboard():
+    form = CreateTournamentForm()
     try:
         # Get tournaments and formats
         tournaments = Tournament.query.order_by(Tournament.date.desc()).all()
@@ -79,28 +103,15 @@ def dashboard():
         if os.path.exists(formats_dir):
             formats = [f.split('.')[0] for f in os.listdir(formats_dir) if f.endswith('.json')]
         
-        if request.method == 'POST':
+        # Update the format choices in the form
+        form.format.choices = [(f, f) for f in formats]
+        
+        if form.validate_on_submit():
             try:
-                # Get form data
-                name = request.form.get('name')
-                date_str = request.form.get('date')
-                location = request.form.get('location')
-                format_name = request.form.get('format')
-                
-                # Validate required fields
-                if not all([name, date_str, location, format_name]):
-                    flash('All fields are required', 'danger')
-                    return redirect(url_for('admin.dashboard'))
-                
-                # Parse date
-                try:
-                    date = datetime.strptime(date_str, '%Y-%m-%d').date()
-                except ValueError:
-                    flash('Invalid date format. Please use YYYY-MM-DD', 'danger')
-                    return redirect(url_for('admin.dashboard'))
-                
-                # Load format JSON
+                # Handle form submission
+                format_name = form.format.data
                 format_path = os.path.join(formats_dir, f'{format_name}.json')
+                
                 if not os.path.exists(format_path):
                     flash('Selected format not found', 'danger')
                     return redirect(url_for('admin.dashboard'))
@@ -110,27 +121,26 @@ def dashboard():
                 
                 # Create and save tournament
                 new_tournament = Tournament(
-                    name=name,
-                    date=date,
-                    location=location,
+                    name=form.name.data,
+                    date=datetime.strptime(form.date.data, '%Y-%m-%d').date(),
+                    location=form.location.data,
                     format_json=format_json
                 )
                 
                 db.session.add(new_tournament)
                 db.session.commit()
                 
-                flash(f'Tournament "{name}" created successfully!', 'success')
+                flash(f'Tournament "{form.name.data}" created successfully!', 'success')
                 return redirect(url_for('admin.dashboard'))
                 
             except Exception as e:
                 db.session.rollback()
                 print(f"Error creating tournament: {str(e)}")
                 flash('An error occurred while creating the tournament', 'danger')
-        
-        # For GET request or if there was an error
         return render_template('admin/dashboard.html', 
                             tournaments=tournaments, 
                             formats=formats,
+                            form=form,
                             current_date=datetime.now().strftime('%Y-%m-%d'))
                             
     except Exception as e:
@@ -140,6 +150,7 @@ def dashboard():
         return render_template('admin/dashboard.html', 
                             tournaments=[], 
                             formats=[],
+                            form=CreateTournamentForm(),
                             current_date=datetime.now().strftime('%Y-%m-%d'))
 
 @admin_bp.route('/tournament/create', methods=['POST'])
@@ -223,7 +234,10 @@ def create_tournament():
 @admin_login_required
 def tournament_details(tournament_id):
     try:
-        tournament = Tournament.query.get_or_404(tournament_id)
+        # Load tournament with reader assignments
+        tournament = Tournament.query.options(
+            db.joinedload(Tournament.reader_assignments).joinedload(ReaderTournament.reader)
+        ).get_or_404(tournament_id)
         
         # Handle POST request for team assignment
         if request.method == 'POST':
@@ -412,13 +426,25 @@ def tournament_details(tournament_id):
             for game in prelim_games
         )
         
-        # Get question counts for each round
+        # Get question counts for each round (separate tossups and bonuses)
         question_counts = {}
+        tossup_counts = {}
+        bonus_counts = {}
         questions = Question.query.filter_by(tournament_id=tournament_id).all()
         for q in questions:
             key = (q.stage, q.round)
             question_counts[key] = question_counts.get(key, 0) + 1
+            
+            # Count tossups and bonuses separately
+            if not q.is_bonus:
+                tossup_counts[key] = tossup_counts.get(key, 0) + 1
+            else:
+                bonus_counts[key] = bonus_counts.get(key, 0) + 1
         
+        # Get list of assigned room numbers, ensuring it's always a list
+        assigned_rooms = [ra.room_number for ra in tournament.reader_assignments] if tournament.reader_assignments else []
+        
+        # Render the template with the processed games
         return render_template('admin/tournament_details.html',
                            tournament=tournament,
                            format_data=format_data,
@@ -430,7 +456,10 @@ def tournament_details(tournament_id):
                            stage_placeholders=stage_placeholders,
                            team_aliases=team_aliases,
                            stage_seeded_teams=stage_seeded_teams,
-                           question_counts=question_counts)
+                           question_counts=question_counts,
+                           tossup_counts=tossup_counts,
+                           bonus_counts=bonus_counts,
+                           assigned_rooms=assigned_rooms)
                            
     except Exception as e:
         db.session.rollback()
@@ -1113,7 +1142,7 @@ def upload_round_file(tournament_id, stage_id, round_number):
             # Check for required files and directories
             required_paths = [
                 ('to-txt.sh', 'file'),
-                ('modules/docx-to-txt.py', 'file'),
+                ('modules/docx_to_txt.py', 'file'),
                 ('modules', 'dir'),
                 'p-docx',
                 'output'
@@ -1193,6 +1222,7 @@ def upload_round_file(tournament_id, stage_id, round_number):
             if not filename:
                 raise ValueError("Invalid filename")
                 
+            # Save the uploaded file to p-docx directory
             file_path = p_docx_dir / filename
             print(f"\n=== Saving uploaded file ===")
             print(f"Saving to: {file_path}")
@@ -1229,10 +1259,6 @@ def upload_round_file(tournament_id, stage_id, round_number):
                     print(f"Parent directory permissions: {oct(file_path.parent.stat().st_mode)[-3:]}")
                 raise Exception(error_msg) from e
             
-            # Set up the environment for the script
-            env = os.environ.copy()
-            env['PYTHONPATH'] = str(parser_dir)  # Add parser_dir to Python path
-            
             # Create packets directory if it doesn't exist
             packets_dir = parser_dir / 'packets'
             packets_dir.mkdir(exist_ok=True)
@@ -1246,58 +1272,44 @@ def upload_round_file(tournament_id, stage_id, round_number):
                 except Exception as e:
                     print(f"    Failed to delete {f}: {e}")
             
-            # Run the docx-to-txt.py script directly
-            docx_to_txt_script = parser_dir / 'modules' / 'docx-to-txt.py'
+            # Import the docx_to_txt module directly
+            import sys
+            # Add the parent directory of the modules directory to Python path
+            sys.path.insert(0, str(parser_dir))
+            try:
+                from modules.docx_to_txt import main as convert_docx_to_txt
+            except ImportError as e:
+                print(f"Error importing docx_to_txt: {e}")
+                print(f"Current sys.path: {sys.path}")
+                print(f"Looking for module in: {parser_dir / 'modules'}")
+                raise
             
-            # Run the docx-to-txt.py script directly
-            print(f"\n=== Running docx-to-txt.py ===")
-            print(f"Script path: {docx_to_txt_script}")
-            print(f"Input file: {file_path}")
-            print(f"Output dir: {packets_dir}")
-            
-            # Prepare the output filename
+            # Set the output file path
             output_file = packets_dir / f"{file_path.stem}.txt"
             
-            # Add debug information
-            print(f"\n=== Debug Information ===")
-            print(f"Current working directory: {os.getcwd()}")
-            print(f"Script path: {docx_to_txt_script}")
+            print(f"\n=== Converting {file_path} to text ===")
             print(f"Input file: {file_path}")
             print(f"Output file: {output_file}")
-            print(f"File exists: {file_path.exists()}")
-            print(f"File size: {file_path.stat().st_size if file_path.exists() else 0} bytes")
             
-            # Run the script with python3 explicitly and without shell=True
-            process = subprocess.Popen(
-                ['python3', str(docx_to_txt_script), str(file_path), str(output_file)],
-                cwd=str(parser_dir),  # Set working directory to parser_dir
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                env=env      # Pass the environment with PYTHONPATH
-            )
+            # Create the output directory if it doesn't exist
+            os.makedirs(packets_dir, exist_ok=True)
             
-            # Wait for completion
-            stdout, stderr = process.communicate()
+            # Run the conversion
+            try:
+                convert_docx_to_txt(str(file_path), str(output_file))
+                print("Conversion completed successfully")
+            except Exception as e:
+                error_msg = f"Error converting file: {str(e)}"
+                print(error_msg)
+                raise Exception(error_msg) from e
             
-            print(f"\ndocx-to-txt.py stdout:\n{stdout}")
-            if stderr:
-                print(f"\ndocx-to-txt.py stderr:\n{stderr}")
-            print(f"docx-to-txt.py return code: {process.returncode}")
-            
-            if process.returncode != 0:
-                error_msg = f"docx-to-txt.py failed with return code {process.returncode}: {stderr}"
-                print(f"ERROR: {error_msg}")
-                raise Exception(error_msg)
-                
             # Verify the output file was created
             if not output_file.exists() or output_file.stat().st_size == 0:
                 raise Exception(f"Output file was not created or is empty: {output_file}")
                 
             print(f"Successfully processed document. Output: {output_file}")
             
-            # Import the packet_parser module directly instead of running as subprocess
-            import sys
+            # Import the packet_parser module
             import os
             
             # Store the current working directory
@@ -1626,11 +1638,24 @@ def upload_round_file(tournament_id, stage_id, round_number):
     if request.method == 'GET':
         print("\nRendering upload form")
         print("Serving upload form template")
+        
+        # Get current question counts for this round
+        current_questions = Question.query.filter_by(
+            tournament_id=tournament_id,
+            stage=stage_id,
+            round=round_number
+        ).all()
+        
+        tossup_count = sum(1 for q in current_questions if not q.is_bonus)
+        bonus_count = sum(1 for q in current_questions if q.is_bonus)
+        
         return render_template('admin/upload_round_file.html', 
                             tournament_name=tournament_name, 
                             tournament_id=tournament_id,
                             stage_id=stage_id, 
-                            round_number=round_number)
+                            round_number=round_number,
+                            tossup_count=tossup_count,
+                            bonus_count=bonus_count)
 
     # Handle POST request
     print("\n=== PROCESSING FILE UPLOAD ===")
@@ -1940,11 +1965,865 @@ def auto_assign_playoff(tournament_id):
     flash("Playoff seeding automatically assigned based on ranking.", "success")
     return redirect(url_for('admin.tournament_details', tournament_id=tournament_id))
 
+@admin_bp.route('/tournament/<int:tournament_id>/assign_reader', methods=['POST'])
+@admin_login_required
+def assign_reader(tournament_id):
+    email = request.form.get('email')
+    room_number = request.form.get('room_number', type=int)
+    
+    if not email or room_number is None:
+        flash('Email and room number are required', 'danger')
+        return redirect(url_for('admin.tournament_details', tournament_id=tournament_id))
+    
+    tournament = Tournament.query.get_or_404(tournament_id)
+    max_rooms = tournament.get_max_rooms()
+    
+    if room_number < 1 or room_number > max_rooms:
+        flash(f'Room number must be between 1 and {max_rooms}', 'danger')
+        return redirect(url_for('admin.tournament_details', tournament_id=tournament_id))
+    
+    reader = Reader.query.filter_by(email=email).first()
+    if not reader:
+        flash(f'No reader found with email: {email}', 'danger')
+        return redirect(url_for('admin.tournament_details', tournament_id=tournament_id))
+    
+    # Check if reader is already assigned to this tournament
+    existing_assignment = next(
+        (ra for ra in tournament.reader_assignments if ra.reader_id == reader.id), 
+        None
+    )
+    
+    if existing_assignment:
+        if existing_assignment.room_number == room_number:
+            flash(f'Reader {email} is already assigned to room {room_number}', 'warning')
+        else:
+            existing_assignment.room_number = room_number
+            db.session.commit()
+            flash(f'Updated {email} to room {room_number}', 'success')
+        return redirect(url_for('admin.tournament_details', tournament_id=tournament_id))
+    
+    try:
+        # Create a new ReaderTournament association with room number
+        from models.reader import ReaderTournament
+        assignment = ReaderTournament(
+            reader_id=reader.id,
+            tournament_id=tournament_id,
+            room_number=room_number
+        )
+        db.session.add(assignment)
+        db.session.commit()
+        flash(f'Successfully assigned {email} to room {room_number}', 'success')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Error assigning reader: {str(e)}')
+        flash('An error occurred while assigning the reader', 'danger')
+        
+    return redirect(url_for('admin.tournament_details', tournament_id=tournament_id))
+
+@admin_bp.route('/tournament/<int:tournament_id>/remove_reader/<int:reader_id>', methods=['POST'])
+@admin_login_required
+def remove_reader(tournament_id, reader_id):
+    tournament = Tournament.query.get_or_404(tournament_id)
+    reader = Reader.query.get_or_404(reader_id)
+    
+    if reader not in tournament.readers:
+        flash('Reader is not assigned to this tournament', 'warning')
+        return redirect(url_for('admin.tournament_details', tournament_id=tournament_id))
+    
+    try:
+        tournament.readers.remove(reader)
+        db.session.commit()
+        flash(f'Successfully removed {reader.email} from the tournament', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('An error occurred while removing the reader', 'danger')
+        
+    return redirect(url_for('admin.tournament_details', tournament_id=tournament_id))
+
+@admin_bp.route('/delete_round_questions/<int:tournament_id>/<stage_id>/<int:round_number>', methods=['POST'])
+@admin_login_required
+def delete_round_questions(tournament_id, stage_id, round_number):
+    """Delete all questions for a specific tournament stage and round"""
+    try:
+        # Delete all questions for this tournament, stage, and round
+        deleted_count = Question.query.filter_by(
+            tournament_id=tournament_id,
+            stage=stage_id,
+            round=round_number
+        ).delete()
+        
+        db.session.commit()
+        
+        flash(f'Successfully deleted {deleted_count} questions for Stage {stage_id}, Round {round_number}', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting questions: {str(e)}', 'danger')
+    
+    return redirect(url_for('admin.tournament_details', tournament_id=tournament_id))
+
 @admin_bp.route('/logout')
+@admin_login_required
 def logout():
     session.pop('admin_id', None)
-    flash('Logged out successfully', 'success')
+    flash('You have been logged out.', 'info')
     return redirect(url_for('admin.login'))
 
+@admin_bp.route('/admin/create', methods=['GET', 'POST'])
+@admin_login_required
+def create_admin():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        
+        if not username:
+            flash('Username is required', 'danger')
+            return redirect(url_for('admin.create_admin'))
+            
+        try:
+            # Check if admin already exists
+            if Admin.query.filter_by(username=username).first():
+                flash('An admin with that username already exists', 'danger')
+                return redirect(url_for('admin.create_admin'))
+                
+            # Create new admin with default password
+            new_admin = Admin(username=username)
+            new_admin.set_password('password')  # Default password
+            db.session.add(new_admin)
+            db.session.commit()
+            
+            flash(f'Admin account for {username} created successfully!', 'success')
+            return redirect(url_for('admin.list_admins'))
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error creating admin: {str(e)}")
+            flash('An error occurred while creating the admin account', 'danger')
+    
+    return render_template('admin/create_admin.html')
+
+@admin_bp.route('/admin/list')
+@admin_login_required
+def list_admins():
+    admins = Admin.query.order_by(Admin.username).all()
+    return render_template('admin/list_admins.html', admins=admins)
+
+class ChangePasswordForm(FlaskForm):
+    current_password = PasswordField('Current Password', validators=[
+        validators.DataRequired(message='Current password is required')
+    ])
+    new_password = PasswordField('New Password', validators=[
+        validators.DataRequired(message='New password is required'),
+        validators.Length(min=8, message='Password must be at least 8 characters long')
+    ])
+    confirm_password = PasswordField('Confirm New Password', validators=[
+        validators.EqualTo('new_password', message='Passwords must match')
+    ])
+    submit = SubmitField('Update Password')
+
+class CreateTournamentForm(FlaskForm):
+    name = StringField('Tournament Name', validators=[validators.DataRequired()])
+    date = StringField('Date', validators=[validators.DataRequired()])
+    location = StringField('Location', validators=[validators.DataRequired()])
+    format = SelectField('Format', validators=[validators.DataRequired()], choices=[])
+    submit = SubmitField('Create Tournament')
+
+@admin_bp.route('/change-password', methods=['GET', 'POST'])
+@admin_login_required
+def change_password():
+    admin = Admin.query.get(session['admin_id'])
+    if not admin:
+        flash('User not found. Please log in again.', 'danger')
+        return redirect(url_for('admin.logout'))
+    
+    # Check if this is a forced password change
+    forced_change = admin.needs_password_change
+    
+    # Initialize form with fields based on forced change
+    form = ChangePasswordForm()
+    
+    if forced_change:
+        # Remove current_password requirement for forced changes
+        form.current_password.validators = []
+    
+    if form.validate_on_submit():
+        current_password = form.current_password.data
+        new_password = form.new_password.data
+        confirm_password = form.confirm_password.data
+        
+        # For non-forced changes, validate current password
+        if not forced_change and not admin.check_password(current_password):
+            flash('Current password is incorrect', 'danger')
+            return render_template('admin/change_password.html', 
+                                 form=form, 
+                                 forced_change=forced_change)
+            
+        # Check if new password is different from current
+        if admin.check_password(new_password):
+            flash('New password must be different from current password', 'danger')
+            return render_template('admin/change_password.html', 
+                                 form=form, 
+                                 forced_change=forced_change)
+            
+        try:
+            # Update password and reset the needs_password_change flag
+            admin.set_password(new_password)
+            admin.needs_password_change = False
+            db.session.commit()
+            
+            flash('Password changed successfully!', 'success')
+            
+            # If this was a forced change, log them in again with the new password
+            if forced_change:
+                login_user(admin)
+                session['admin_id'] = admin.id
+                return redirect(url_for('admin.dashboard'))
+                
+            return redirect(url_for('admin.dashboard'))
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error changing password: {str(e)}")
+            flash('An error occurred while changing your password. Please try again.', 'danger')
+    
+    return render_template('admin/change_password.html', 
+                         form=form, 
+                         forced_change=forced_change)
+
+# Add a before_request to check if password needs to be changed
+@admin_bp.before_request
+def check_password_change():
+    # Skip if not logged in or if the endpoint is in the whitelist
+    if 'admin_id' not in session or request.endpoint in ['admin.logout', 'admin.change_password', 'static']:
+        return
+        
+    admin = Admin.query.get(session['admin_id'])
+    if admin and admin.needs_password_change:
+        # Only redirect if not already on the change password page
+        if request.endpoint != 'admin.change_password':
+            return redirect(url_for('admin.change_password'))
+
+@admin_bp.route('/admin/delete/<int:admin_id>', methods=['POST'])
+@admin_login_required
+def delete_admin(admin_id):
+    # Prevent deleting your own account
+    if admin_id == session.get('admin_id'):
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'You cannot delete your own account while logged in.'}), 400
+        flash('You cannot delete your own account while logged in.', 'danger')
+        return redirect(url_for('admin.list_admins'))
+    
+    # Prevent deleting the default admin (ID 1)
+    if admin_id == 1:
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'The default admin account cannot be deleted.'}), 400
+        flash('The default admin account cannot be deleted.', 'danger')
+        return redirect(url_for('admin.list_admins'))
+    
+    try:
+        admin = Admin.query.get_or_404(admin_id)
+        username = admin.username
+        db.session.delete(admin)
+        db.session.commit()
+        
+        if request.is_json:
+            return jsonify({'success': True, 'message': f'Successfully deleted admin account: {username}'})
+            
+        flash(f'Successfully deleted admin account: {username}', 'success')
+    except Exception as e:
+        db.session.rollback()
+        error_msg = f'An error occurred while deleting the admin account: {str(e)}'
+        print(error_msg)
+        
+        if request.is_json:
+            return jsonify({'success': False, 'message': error_msg}), 500
+            
+        flash('An error occurred while deleting the admin account.', 'danger')
+    
+    return redirect(url_for('admin.list_admins'))
+
+@admin_bp.route('/admin/reset-password/<int:admin_id>', methods=['POST'])
+@admin_login_required
+def reset_admin_password(admin_id):
+    try:
+        # Get the current admin
+        current_admin = Admin.query.get(session['admin_id'])
+        if not current_admin:
+            return jsonify({'success': False, 'message': 'Session expired. Please log in again.'}), 401
+            
+        # Get the target admin
+        admin = Admin.query.get_or_404(admin_id)
+        
+        # Prevent resetting your own password this way (use change password instead)
+        if admin_id == current_admin.id:
+            return jsonify({
+                'success': False, 
+                'message': 'Please use the Change Password feature to update your own password.'
+            }), 400
+        
+        # Reset the password to 'password' and force change on next login
+        admin.set_password('password')
+        admin.needs_password_change = True
+        
+        # Update the updated_at timestamp
+        admin.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Password for {admin.username} has been reset. They will be prompted to change it on next login.'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        error_msg = f'Error resetting password: {str(e)}'
+        print(error_msg)
+        return jsonify({'success': False, 'message': error_msg}), 500
+
+@admin_bp.route('/api/teams/<int:tournament_id>/add_player', methods=['POST'])
+@admin_login_required
+def add_player_to_team(tournament_id):
+    """
+    API endpoint to add a player to a team in the admin dashboard.
+    Expected JSON payload:
+    {
+        'team_id': str,  # e.g., 'T1', 'T2', etc.
+        'player_name': str,
+        'player_number': str (optional)
+    }
+    """
+    current_app.logger.info('\n=== START admin add_player_to_team ===')
+    
+    try:
+        data = request.get_json()
+        team_id = data.get('team_id')
+        player_name = data.get('player_name')
+        player_number = data.get('player_number')
+        
+        current_app.logger.info(f"Adding player to team - Tournament: {tournament_id}, Team: {team_id}, Player: {player_name}")
+        
+        if not team_id or not player_name:
+            return jsonify({
+                'success': False,
+                'message': 'Team ID and player name are required'
+            }), 400
+        
+        # Find an existing player on the same team to get their alias_id
+        team_players = Player.query.filter(
+            Player.team_id == team_id
+        ).all()
+        
+        # Get alias_id from first teammate if available
+        alias_id = team_players[0].alias_id if team_players else None
+        
+        # Check for existing players with same name (case insensitive)
+        existing_players = Player.query.filter(
+            Player.team_id == team_id,
+            db.func.lower(Player.name) == player_name.lower()
+        ).all()
+        
+        if existing_players:
+            return jsonify({
+                'success': False,
+                'message': 'Player with this name already exists on the team',
+                'existing_players': [p.id for p in existing_players]
+            }), 400
+        
+        # Create new player with same alias_id as teammates if available
+        new_player = Player(
+            name=player_name,
+            team_id=team_id,
+            alias_id=alias_id
+        )
+        
+        if player_number is not None:
+            new_player.number = player_number
+        
+        db.session.add(new_player)
+        db.session.commit()
+        
+        current_app.logger.info(f'Successfully created player with ID: {new_player.id}')
+        
+        # Get updated player list for the team
+        updated_players = [p.name for p in Player.query.filter_by(team_id=team_id).all()]
+        
+        return jsonify({
+            'success': True,
+            'player_id': new_player.id,
+            'player_name': new_player.name,
+            'team_id': team_id,
+            'updated_players': updated_players
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f'Error in admin add_player_to_team: {str(e)}', exc_info=True)
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'Failed to add player: {str(e)}'
+        }), 500
+
+@admin_bp.route('/api/teams/<int:tournament_id>/delete/<team_id>', methods=['DELETE'])
+@admin_login_required
+def delete_team(tournament_id, team_id):
+    """
+    API endpoint to delete a team and all its players from a tournament.
+    """
+    current_app.logger.info(f'\n=== START delete_team ===\nTournament: {tournament_id}, Team: {team_id}')
+    
+    try:
+        # Verify the tournament exists
+        tournament = Tournament.query.get_or_404(tournament_id)
+        
+        # Get all players in the team
+        players = Player.query.filter_by(team_id=team_id).all()
+        
+        # Get all team aliases for this team in the tournament
+        team_aliases = TeamAlias.query.filter_by(
+            tournament_id=tournament_id,
+            team_id=team_id
+        ).all()
+        
+        # Delete all players in the team
+        for player in players:
+            db.session.delete(player)
+        
+        # Delete all team aliases for this team
+        for alias in team_aliases:
+            db.session.delete(alias)
+        
+        # Commit the changes
+        db.session.commit()
+        
+        current_app.logger.info(f'Successfully deleted team {team_id}, its players, and aliases')
+        
+        return jsonify({
+            'success': True,
+            'message': f'Team {team_id}, its players, and aliases have been deleted',
+            'team_id': team_id
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Error in delete_team: {str(e)}', exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Failed to delete team: {str(e)}'
+        }), 500
+
+@admin_bp.route('/api/teams/<int:tournament_id>/delete_player/<int:player_id>', methods=['DELETE'])
+@admin_login_required
+def delete_player(tournament_id, player_id):
+    """
+    API endpoint to delete a player from a team.
+    """
+    current_app.logger.info(f'\n=== START delete_player ===\nPlayer ID: {player_id}, Tournament: {tournament_id}')
+    
+    try:
+        # Verify the tournament exists
+        tournament = Tournament.query.get_or_404(tournament_id)
+        
+        # Get the player
+        player = Player.query.get_or_404(player_id)
+        
+        # Verify the player belongs to this tournament
+        team_alias = TeamAlias.query.get(player.alias_id)
+        if not team_alias or team_alias.tournament_id != tournament_id:
+            return jsonify({
+                'success': False,
+                'message': 'Player not found in this tournament'
+            }), 404
+        
+        # Delete the player
+        db.session.delete(player)
+        db.session.commit()
+        
+        current_app.logger.info(f'Successfully deleted player {player_id} from team {team_alias.team_id}')
+        
+        return jsonify({
+            'success': True,
+            'message': 'Player deleted successfully',
+            'player_id': player_id,
+            'team_id': team_alias.team_id
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Error in delete_player: {str(e)}', exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Failed to delete player: {str(e)}'
+        }), 500
+
+@admin_bp.route('/api/teams/<int:tournament_id>/players')
+@admin_login_required
+def get_team_players(tournament_id):
+    """
+    API endpoint to get all players for a specific team in a tournament.
+    """
+    try:
+        team_id = request.args.get('team_id')
+        if not team_id:
+            return jsonify({
+                'success': False,
+                'message': 'Team ID is required'
+            }), 400
+            
+        # Get all players for this team in the tournament
+        players = db.session.query(Player, TeamAlias).join(
+            TeamAlias, Player.alias_id == TeamAlias.id
+        ).filter(
+            TeamAlias.tournament_id == tournament_id,
+            Player.team_id == team_id
+        ).all()
+        
+        # Format the response
+        players_data = [{
+            'id': player.id,
+            'name': player.name,
+            'team_id': player.team_id,
+            'alias_id': player.alias_id
+        } for player, _ in players]
+        
+        return jsonify({
+            'success': True,
+            'players': players_data
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f'Error in get_team_players: {str(e)}', exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'Failed to fetch players: {str(e)}'
+        }), 500
+
+@admin_bp.route('/tournament/<int:tournament_id>/game/<int:game_id>/scorecard', methods=['GET', 'POST'])
+@admin_login_required
+def edit_game_scorecard(tournament_id, game_id):
+    """
+    View and edit a game's scorecard as an admin.
+    """
+    game = Game.query.get_or_404(game_id)
+    tournament = Tournament.query.get_or_404(tournament_id)
+    
+    # Verify the game belongs to the tournament
+    if game.tournament_id != tournament.id:
+        flash("Game does not belong to this tournament", "danger")
+        return redirect(url_for('admin.tournament_details', tournament_id=tournament_id))
+    
+    # Get team names and resolve any dynamic references
+    team1_id = game.team1
+    team1_display_name = game.team1
+    team2_id = game.team2
+    team2_display_name = game.team2
+    
+    # Resolve team references if they are dynamic (e.g., W(S1R1M1))
+    if team1_id and str(team1_id).startswith('W('):
+        resolved_id, resolved_name, _ = resolve_team_reference(tournament.id, team1_id)
+        if resolved_id and resolved_name:
+            team1_id = resolved_id
+            team1_display_name = resolved_name
+    
+    if team2_id and str(team2_id).startswith('W('):
+        resolved_id, resolved_name, _ = resolve_team_reference(tournament.id, team2_id)
+        if resolved_id and resolved_name:
+            team2_id = resolved_id
+            team2_display_name = resolved_name
+    
+    # Get all questions for this game
+    questions = Question.query.filter_by(game_id=game_id).order_by(Question.id).all()
+    
+    # Get all players for both teams by joining with TeamAlias
+    team1_players = db.session.query(Player).join(
+        TeamAlias, Player.alias_id == TeamAlias.id
+    ).filter(
+        TeamAlias.tournament_id == tournament_id,
+        Player.team_id == team1_id
+    ).all()
+    
+    team2_players = db.session.query(Player).join(
+        TeamAlias, Player.alias_id == TeamAlias.id
+    ).filter(
+        TeamAlias.tournament_id == tournament_id,
+        Player.team_id == team2_id
+    ).all()
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            
+            # Update game result if provided
+            if 'result' in data:
+                game.result = data['result']
+            
+            # Process scorecard data
+            if 'scorecard' in data:
+                scorecard = data['scorecard']
+                
+                # Convert the scorecard to JSON string for storage
+                game.scorecard = json.dumps(scorecard)
+                
+                # Update game stats based on scorecard
+                team1_score = 0
+                team2_score = 0
+                
+                for tossup in scorecard:
+                    # Calculate tossup points
+                    for player_id, points in tossup.get('team1', {}).items():
+                        team1_score += int(points) if str(points).isdigit() else 0
+                    for player_id, points in tossup.get('team2', {}).items():
+                        team2_score += int(points) if str(points).isdigit() else 0
+                    
+                    # Add bonus points
+                    team1_score += int(tossup.get('team1Bonus', 0)) if str(tossup.get('team1Bonus', 0)).isdigit() else 0
+                    team2_score += int(tossup.get('team2Bonus', 0)) if str(tossup.get('team2Bonus', 0)).isdigit() else 0
+                
+                # Update game scores
+                game.team1_score = team1_score
+                game.team2_score = team2_score
+                
+                # Update result based on scores if not explicitly set
+                if 'result' not in data:
+                    if team1_score > team2_score:
+                        game.result = 1
+                    elif team2_score > team1_score:
+                        game.result = 2
+                    else:
+                        game.result = -1  # Tie
+            
+            db.session.commit()
+            return jsonify({
+                'status': 'success', 
+                'message': 'Scorecard updated successfully',
+                'team1_score': game.team1_score,
+                'team2_score': game.team2_score,
+                'result': game.result
+            })
+            
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error updating scorecard: {str(e)}", exc_info=True)
+            return jsonify({'status': 'error', 'message': str(e)}), 400
+    
+    # For GET request, load the scorecard if it exists
+    scorecard = []
+    if game.scorecard:
+        try:
+            scorecard = json.loads(game.scorecard)
+        except json.JSONDecodeError:
+            current_app.logger.error(f"Invalid scorecard JSON for game {game_id}")
+            scorecard = []
+    
+    # If no scorecard exists, initialize with empty tossups
+    if not scorecard:
+        # Default to 20 tossups if no questions exist, otherwise use the number of questions
+        num_tossups = len(questions) if questions else 20
+        scorecard = [{
+            'team1': {},
+            'team2': {},
+            'team1Bonus': 0,
+            'team2Bonus': 0,
+            'buzzes': {}
+        } for _ in range(num_tossups)]
+    
+    return render_template(
+        'admin/scorecard_editor.html',
+        tournament=tournament,
+        game=game,
+        team1_id=team1_id,
+        team1_name=team1_display_name,
+        team2_id=team2_id,
+        team2_name=team2_display_name,
+        questions=questions,
+        team1_players=team1_players,
+        team2_players=team2_players,
+        scorecard=scorecard
+    )
+
+# Helper function to resolve team references (similar to the one in reader_controller)
+def resolve_team_reference(tournament_id, team_ref, depth=0, max_depth=5):
+    """
+    Resolve a team reference like 'W(S2R1M4)' to an actual team ID.
+    
+    Args:
+        tournament_id: ID of the tournament
+        team_ref: The team reference to resolve (e.g., 'W(S2R1M1)')
+        depth: Current recursion depth (used internally)
+        max_depth: Maximum allowed recursion depth to prevent infinite loops
+        
+    Returns:
+        tuple: (team_id, team_name, pending_info) where:
+            - If resolved: (team_id, team_name, None)
+            - If pending: (None, None, {'ref': team_ref, 'game': game_details, 'team1': team1_name, 'team2': team2_name})
+            - If error: (None, None, None)
+    """
+    if depth > max_depth:
+        return None, None, None
+        
+    try:
+        # Handle both full references (W(S2R1M4)) and just the code (S2R1M4)
+        if team_ref.startswith(('W(', 'L(')) and team_ref.endswith(')'):
+            ref = team_ref[2:-1]  # Remove W( or L( and )
+            is_winner = team_ref.startswith('W')
+        else:
+            ref = team_ref
+            is_winner = True  # Default to winner if not specified
+            
+        # Parse the reference
+        stage = int(ref[1])
+        round_num = int(ref[3])
+        match_num = int(ref[5:]) if 'M' in ref else int(ref[ref.index('M')+1:])
+        
+        # Find the game
+        game = Game.query.filter_by(
+            tournament_id=tournament_id,
+            stage_id=stage,
+            round_number=round_num,
+            match_number=match_num
+        ).first()
+        
+        if not game:
+            return None, None, None
+            
+        # If game is complete, get the winner/loser
+        if game.result is not None and game.result > 0:
+            winning_team = game.team1 if game.result == 1 else game.team2
+            team_name = game.team1_name if game.result == 1 else game.team2_name
+            return winning_team, team_name, None
+        else:
+            # Game is not complete yet, return pending info
+            team1_name = game.team1
+            team2_name = game.team2
+            
+            # Resolve team names if they are also references
+            if team1_name and str(team1_name).startswith('W('):
+                _, resolved_name, _ = resolve_team_reference(tournament_id, team1_name, depth+1, max_depth)
+                if resolved_name:
+                    team1_name = resolved_name
+                    
+            if team2_name and str(team2_name).startswith('W('):
+                _, resolved_name, _ = resolve_team_reference(tournament_id, team2_name, depth+1, max_depth)
+                if resolved_name:
+                    team2_name = resolved_name
+            
+            return None, None, {
+                'ref': team_ref,
+                'game': game,
+                'team1': team1_name,
+                'team2': team2_name
+            }
+            
+    except Exception as e:
+        current_app.logger.error(f"Error resolving team reference {team_ref}: {str(e)}")
+        return None, None, None
+
+@admin_bp.route('/tournament/<int:tournament_id>/games')
+@admin_login_required
+def list_tournament_games(tournament_id):
+    """
+    List all games for a tournament with options to edit scorecards.
+    """
+    tournament = Tournament.query.get_or_404(tournament_id)
+    
+    # Get all games for this tournament with related data
+    games = Game.query.filter_by(tournament_id=tournament_id)\
+                     .order_by(Game.stage_id, Game.round_number, Game.id)\
+                     .all()
+    
+    # Organize games by stage and round
+    games_by_stage = {}
+    for game in games:
+        # Ensure the game has all necessary attributes
+        if not hasattr(game, 'stage_id') or game.stage_id is None:
+            game.stage_id = 1
+        if not hasattr(game, 'round_number') or game.round_number is None:
+            game.round_number = 1
+            
+        stage_id = game.stage_id
+        round_num = game.round_number
+        
+        # Initialize the stage and round structures if they don't exist
+        if stage_id not in games_by_stage:
+            games_by_stage[stage_id] = {}
+        if round_num not in games_by_stage[stage_id]:
+            games_by_stage[stage_id][round_num] = []
+        
+        # Add the game to the appropriate stage and round
+        games_by_stage[stage_id][round_num].append(game)
+        
+        # Set a match number based on position in the round
+        game._match_number = len(games_by_stage[stage_id][round_num])
+    
+    # Get format data for stage names
+    format_data = json.loads(tournament.format_json) if tournament.format_json else {}
+    
+    return render_template(
+        'admin/tournament_games.html',
+        tournament=tournament,
+        games_by_stage=games_by_stage,
+        format_data=format_data
+    )
+
 # Export the upload_round_file function for CSRF exemption
+@admin_bp.route('/alerts', methods=['GET'])
+# @login_required  # Temporarily disabled for testing
+def get_alerts():
+    """
+    API endpoint to get all active (unresolved) alerts.
+    """
+    try:
+        current_app.logger.info('GET /admin/alerts endpoint called')
+        
+        # Get active (unresolved) alerts
+        alerts = Alert.query.filter_by(resolved=False).order_by(Alert.created_at.desc()).all()
+        current_app.logger.info(f'Found {len(alerts)} active alerts')
+        
+        # Convert alerts to dictionary format for JSON serialization
+        alerts_data = [alert.to_dict() for alert in alerts]
+        
+        response_data = {
+            'success': True,
+            'alerts': alerts_data
+        }
+        
+        current_app.logger.info(f'Returning response: {response_data}')
+        response = jsonify(response_data)
+        response.headers['Content-Type'] = 'application/json'
+        return response
+        
+    except Exception as e:
+        current_app.logger.error(f'Error in get_alerts: {str(e)}', exc_info=True)
+        response = jsonify({
+            'success': False,
+            'error': 'Failed to fetch alerts',
+            'details': str(e)
+        })
+        response.status_code = 500
+        response.headers['Content-Type'] = 'application/json'
+        return response
+
+@admin_bp.route('/alerts/<int:alert_id>/resolve', methods=['POST'])
+@login_required
+def resolve_alert(alert_id):
+    """
+    API endpoint to mark an alert as resolved.
+    """
+    try:
+        alert = Alert.query.get_or_404(alert_id)
+        alert.resolved = True
+        alert.resolved_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Alert resolved successfully'
+        })
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Error resolving alert {alert_id}: {str(e)}')
+        return jsonify({
+            'success': False,
+            'error': 'Failed to resolve alert'
+        }), 500
+
 __all__ = ['admin_bp', 'upload_round_file']

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Welcome, {{ current_user.email }}</h2>
+        <a href="{{ url_for('reader.logout') }}" class="btn btn-outline-danger">Logout</a>
+    </div>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <div class="card">
+        <div class="card-header">
+            <h4 class="mb-0">Your Assigned Tournaments</h4>
+        </div>
+        <div class="card-body">
+            {% if tournaments %}
+                <div class="list-group">
+                    {% for tournament in tournaments %}
+                        <a href="{{ url_for('reader.view_tournament', tournament_id=tournament.id) }}" class="list-group-item list-group-item-action">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h5 class="mb-1">{{ tournament.name }}</h5>
+                                <small>{{ tournament.date.strftime('%B %d, %Y') }}</small>
+                            </div>
+                            <p class="mb-1">{{ tournament.location }}</p>
+                            <small>Click to view games</small>
+                        </a>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    You don't have any assigned tournaments yet. Please contact an administrator.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

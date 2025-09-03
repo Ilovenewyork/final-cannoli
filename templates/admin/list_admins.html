@@ -1,0 +1,297 @@
+{% extends "admin/base.html" %}
+
+{% block page_title %}<i class="fas fa-users-cog me-2"></i>Admin Accounts{% endblock %}
+
+{% block page_actions %}
+    <a href="{{ url_for('admin.create_admin') }}" class="btn btn-primary">
+        <i class="fas fa-user-plus me-1"></i> Add Admin
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show m-3" role="alert">
+                        <i class="fas {% if category == 'success' %}fa-check-circle{% elif category == 'danger' %}fa-exclamation-circle{% else %}fa-info-circle{% endif %} me-2"></i>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        {% if admins %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Admin</th>
+                        <th>Account Created</th>
+                        <th>Last Updated</th>
+                        <th>Status</th>
+                        <th class="text-end pe-4">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for admin in admins %}
+                    <tr class="{% if admin.id == session.get('admin_id') %}table-active{% endif %}">
+                        <td class="ps-4">
+                            <div class="d-flex align-items-center">
+                                <div class="avatar-sm bg-light rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 36px; height: 36px;">
+                                    <i class="fas fa-user-shield text-primary"></i>
+                                </div>
+                                <div>
+                                    <div class="fw-semibold">{{ admin.username }}</div>
+                                    <small class="text-muted">ID: {{ admin.id }}</small>
+                                </div>
+                                {% if admin.id == session.get('admin_id') %}
+                                    <span class="badge bg-primary-soft ms-2">You</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="d-flex flex-column">
+                                <span>{{ admin.created_at.strftime('%b %d, %Y') }}</span>
+                                <small class="text-muted">{{ admin.created_at.strftime('%I:%M %p') }}</small>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="d-flex flex-column">
+                                <span>{{ admin.updated_at.strftime('%b %d, %Y') }}</span>
+                                <small class="text-muted">{{ admin.updated_at.strftime('%I:%M %p') }}</small>
+                            </div>
+                        </td>
+                        <td>
+                            {% if admin.needs_password_change %}
+                                <span class="badge bg-warning bg-opacity-10 text-warning">
+                                    <i class="fas fa-exclamation-circle me-1"></i> Reset Required
+                                </span>
+                            {% else %}
+                                <span class="badge bg-success bg-opacity-10 text-success">
+                                    <i class="fas fa-check-circle me-1"></i> Active
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end pe-4">
+                            {% if admin.id != session.get('admin_id') %}
+                                <div class="btn-group" role="group">
+                                    {% if admin.needs_password_change %}
+                                        <!-- <button class="btn btn-sm btn-outline-warning" 
+                                                data-bs-toggle="tooltip" 
+                                                title="Reset Password"
+                                                data-admin-id="{{ admin.id }}"
+                                                data-username="{{ admin.username }}"
+                                                onclick="handleResetPassword(this)">
+                                            <i class="fas fa-sync-alt"></i>
+                                        </button> -->
+                                    {% endif %}
+                                    
+                                    {% if admin.id == 1 %}
+                                    <button class="btn btn-sm btn-outline-danger" disabled>
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                    {% else %}
+                                    <button class="btn btn-sm btn-outline-danger" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#deleteModal{{ admin.id }}"
+                                            data-bs-placement="top"
+                                            title="Delete Admin">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- Delete Confirmation Modal -->
+                                <div class="modal fade" id="deleteModal{{ admin.id }}" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header bg-light">
+                                                <h5 class="modal-title">
+                                                    <i class="fas fa-exclamation-triangle text-danger me-2"></i>
+                                                    Confirm Deletion
+                                                </h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p>You are about to delete the admin account for <strong>{{ admin.username }}</strong>. This action cannot be undone.</p>
+                                                <div class="alert alert-warning mb-0">
+                                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                                    <strong>Warning:</strong> This will permanently remove all access for this admin.
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                                                    <i class="fas fa-times me-1"></i> Cancel
+                                                </button>
+                                                <form action="{{ url_for('admin.delete_admin', admin_id=admin.id) }}" method="POST" class="d-inline">
+                                                    <input type="hidden" name="_method" value="DELETE">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                    <button type="submit" class="btn btn-danger">
+                                                        <i class="fas fa-trash-alt me-1"></i> Delete Admin
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <span class="text-muted small">Current session</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center p-5">
+            <div class="mb-3">
+                <i class="fas fa-users-cog fa-4x text-muted"></i>
+            </div>
+            <h5 class="mb-2">No Admin Accounts Found</h5>
+            <p class="text-muted mb-4">Get started by adding a new admin account</p>
+            <a href="{{ url_for('admin.create_admin') }}" class="btn btn-primary">
+                <i class="fas fa-user-plus me-1"></i> Add Admin
+            </a>
+        </div>
+        {% endif %}
+    </div>
+    
+    {% if admins %}
+    <div class="card-footer bg-transparent border-top">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="text-muted small">
+                Showing <strong>{{ admins|length }}</strong> admin account{{ '' if admins|length == 1 else 's' }}
+            </div>
+            <div class="text-muted small">
+                <i class="fas fa-info-circle me-1"></i> Default admin account (ID: 1) cannot be deleted
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// Initialize tooltips when document is ready
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Bootstrap tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
+    // Add event listeners for reset password buttons
+    var resetButtons = document.querySelectorAll('[onclick*="handleResetPassword"]');
+    resetButtons.forEach(function(button) {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            var adminId = this.getAttribute('data-admin-id');
+            var username = this.getAttribute('data-username');
+            handleResetPassword(adminId, username);
+        });
+    });
+});
+
+// Handle reset password button click
+function handleResetPassword(adminId, username) {
+    if (!adminId || !username) {
+        console.error('Missing admin ID or username');
+        return;
+    }
+    
+    if (confirm(`Reset password for ${username}? They will be required to set a new password on next login.`)) {
+        resetPassword(adminId, username);
+    }
+}
+
+// Function to handle password reset via API
+function resetPassword(adminId, username) {
+    if (!adminId || !username) {
+        console.error('Missing required parameters for password reset');
+        return;
+    }
+    
+    fetch(`/admin/reset-password/${adminId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': getCookie('csrftoken') || ''
+        },
+        credentials: 'same-origin'
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        if (data.success) {
+            showAlert('success', `Password for ${username} has been reset. They will be prompted to set a new password on next login.`);
+            // Reload after a short delay to show the success message
+            setTimeout(function() {
+                window.location.reload();
+            }, 1500);
+        } else {
+            throw new Error(data.message || 'Unknown error occurred');
+        }
+    })
+    .catch(function(error) {
+        console.error('Error:', error);
+        showAlert('danger', 'Failed to reset password: ' + (error.message || 'Please try again later.'));
+    });
+}
+
+// Helper function to show alert messages
+function showAlert(type, message) {
+    var alertHtml = `
+        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `;
+    
+    // Create a container for alerts if it doesn't exist
+    var alertContainer = document.getElementById('alert-container');
+    if (!alertContainer) {
+        alertContainer = document.createElement('div');
+        alertContainer.id = 'alert-container';
+        document.body.insertBefore(alertContainer, document.body.firstChild);
+    }
+    
+    // Add the new alert
+    var tempDiv = document.createElement('div');
+    tempDiv.innerHTML = alertHtml;
+    alertContainer.appendChild(tempDiv.firstElementChild);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(function() {
+        var alert = bootstrap.Alert.getOrCreateInstance(tempDiv.querySelector('.alert'));
+        alert.close();
+    }, 5000);
+}
+
+// Get CSRF token from cookies
+function getCookie(name) {
+    var cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        var cookies = document.cookie.split(';');
+        for (var i = 0; i < cookies.length; i++) {
+            var cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+{% endblock %}

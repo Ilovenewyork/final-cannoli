@@ -25,10 +25,10 @@ for filename in p-$TYPE/*.$TYPE; do
     case $TYPE in
         pdf)
             python modules/pdf-to-docx.py "$filename"
-            python modules/docx-to-txt.py "${filename%.pdf}.docx" "packets/${BASENAME_NOEXT}.txt"
+            python modules/docx_to_txt.py "${filename%.pdf}.docx" "packets/${BASENAME_NOEXT}.txt"
             ;;
         docx)
-            python modules/docx-to-txt.py "$filename" "packets/${BASENAME_NOEXT}.txt"
+            python modules/docx_to_txt.py "$filename" "packets/${BASENAME_NOEXT}.txt"
             ;;
         txt)
             cp "$filename" "packets/${BASENAME_NOEXT}.txt"

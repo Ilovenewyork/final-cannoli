@@ -1,15 +1,23 @@
 import json
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, current_app
+from flask_login import login_user, login_required, logout_user, current_user
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, SubmitField, validators
 import re
 from sqlalchemy import and_, or_
 from models.tournament import Tournament
 from models.game import Game
 from models.team_alias import TeamAlias
 from models.player import Player
-from models.team_alias import TeamAlias
 from models.question import Question
-from flask_login import login_required
-from extensions import db
+from models.reader import Reader
+from extensions import db, login_manager
+
+reader_bp = Blueprint('reader', __name__, template_folder='../templates/reader')
+
+@login_manager.user_loader
+def load_reader(reader_id):
+    return Reader.query.get(int(reader_id))
 
 def format_reference(ref):
     """Convert reference like 'S2R1M4' to 'Stage 2 Round 1 Match 4'"""
@@ -26,140 +34,202 @@ def format_reference(ref):
     except (IndexError, ValueError, AttributeError):
         return ref  # Return original if format is unexpected
 
-reader_bp = Blueprint('reader', __name__, template_folder='../templates/reader')
+class RegistrationForm(FlaskForm):
+    email = StringField('Email', [
+        validators.DataRequired(),
+        validators.Email(),
+        validators.Length(min=6, max=120)
+    ])
+    password = PasswordField('Password', [
+        validators.DataRequired(),
+        validators.Length(min=8, message='Password must be at least 8 characters long')
+    ])
+    confirm_password = PasswordField('Confirm Password', [
+        validators.EqualTo('password', message='Passwords must match')
+    ])
+    submit = SubmitField('Register')
 
-@reader_bp.route('/', methods=['GET', 'POST'])
-def select_tournament():
-    if request.method == 'POST':
-        tournament_id = request.form.get('tournament_id')
-        password = request.form.get('password')
-        tournament = Tournament.query.get(tournament_id)
-        if not tournament:
-            flash("Tournament not found", "danger")
-            return redirect(url_for('reader.select_tournament'))
-        if tournament.password != password:
-            flash("Invalid tournament password", "danger")
-            return redirect(url_for('reader.select_tournament'))
-        return redirect(url_for('reader.tournament_games', tournament_id=tournament.id))
-    tournaments = Tournament.query.all()
-    return render_template('select_tournament.html', tournaments=tournaments)
+
+class LoginForm(FlaskForm):
+    email = StringField('Email', [
+        validators.DataRequired(),
+        validators.Email()
+    ])
+    password = PasswordField('Password', [
+        validators.DataRequired()
+    ])
+    submit = SubmitField('Login')
+
+@reader_bp.route('/register', methods=['GET', 'POST'])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for('reader.dashboard'))
+    
+    form = RegistrationForm()
+    if form.validate_on_submit():
+        email = form.email.data
+        password = form.password.data
+        
+        # Check if email already exists
+        if Reader.query.filter_by(email=email).first():
+            flash('Email already registered', 'danger')
+            return render_template('reader/register.html', form=form)
+            
+        # Create new reader
+        reader = Reader(email=email)
+        reader.set_password(password)
+        
+        db.session.add(reader)
+        db.session.commit()
+        
+        flash('Registration successful! Please log in.', 'success')
+        return redirect(url_for('reader.login'))
+        
+    return render_template('reader/register.html', form=form)
+
+@reader_bp.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('reader.dashboard'))
+    
+    form = LoginForm()
+    if form.validate_on_submit():
+        email = form.email.data
+        password = form.password.data
+        
+        reader = Reader.query.filter_by(email=email).first()
+        
+        if reader and reader.check_password(password):
+            login_user(reader)
+            reader.update_last_login()
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('reader.dashboard'))
+        else:
+            flash('Invalid email or password', 'danger')
+    
+    return render_template('reader/login.html', form=form)
+
+@reader_bp.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('reader.login'))
+
+@reader_bp.route('/dashboard')
+@login_required
+def dashboard():
+    # Get tournaments assigned to the current reader
+    # No need to call .all() on an association proxy, it's already a list-like object
+    tournaments = current_user.assigned_tournaments
+    return render_template('reader/dashboard.html', tournaments=tournaments)
 
 @reader_bp.route('/tournament/<int:tournament_id>')
+@login_required
+def view_tournament(tournament_id):
+    # Redirect to the tournament_games endpoint which handles room assignments
+    return redirect(url_for('reader.tournament_games', tournament_id=tournament_id))
+
+@reader_bp.route('/tournament/<int:tournament_id>/games')
+@login_required
 def tournament_games(tournament_id):
     tournament = Tournament.query.get_or_404(tournament_id)
-    # Get all games for this tournament
-    games = Game.query.filter_by(tournament_id=tournament.id).all()
     
-    # Create a dictionary to store team display names
-    team_display_names = {}
+    # Verify reader has access to this tournament and get their room assignment
+    assignment = next(
+        (ra for ra in tournament.reader_assignments if ra.reader_id == current_user.id),
+        None
+    )
+    
+    if not assignment or not assignment.room_number:
+        flash('You are not assigned to a room in this tournament', 'danger')
+        return redirect(url_for('reader.dashboard'))
+    
+    room_number = assignment.room_number
+    
+    # Get all games for this tournament
+    all_games = Game.query.filter_by(tournament_id=tournament.id).order_by(
+        Game.stage_id, 
+        Game.round_number,
+        Game.id
+    ).all()
+    
+    # Filter games for the reader's room
+    # We'll assume games are assigned to rooms in a round-robin fashion based on their position in the round
+    games = []
+    games_by_round = {}
+    
+    # First, group games by stage and round
+    for game in all_games:
+        key = (game.stage_id or 1, game.round_number or 1)
+        if key not in games_by_round:
+            games_by_round[key] = []
+        games_by_round[key].append(game)
+    
+    # Then, for each round, assign games to rooms
+    for round_games in games_by_round.values():
+        # Sort games by ID for consistent ordering
+        round_games.sort(key=lambda g: g.id)
+        
+        # Assign games to rooms in round-robin fashion
+        for i, game in enumerate(round_games, 1):
+            if i == room_number:
+                game.room_number = room_number  # Add room number to game object for display
+                games.append(game)
+    
+    # Sort the final games list by stage, round, and game ID
+    games.sort(key=lambda g: ((g.stage_id or 1), (g.round_number or 1), g.id))
     
     # Process each game to get display names
-    processed_games = []
     for game in games:
-        def get_team_alias(team_id, stage_id):
-            if not team_id:
-                return None
+        # Get team display names with aliases
+        team1_name = game.team1
+        team2_name = game.team2
+        
+        # Helper function to get team display name with alias
+        def get_team_display(team_name, stage_id):
+            if not team_name:
+                return "TBD"
                 
-            # Debug log
-            print(f"Looking up alias for team_id: {team_id}, stage_id: {stage_id}")
-                
-            # First try to find an exact match for team_id and stage_id
+            # Try to find an alias for this team in the tournament
+            # First try to find a team alias by name in the current stage
             alias = TeamAlias.query.filter(
+                TeamAlias.team_name == team_name,
                 TeamAlias.tournament_id == tournament.id,
-                TeamAlias.team_id == team_id,
                 TeamAlias.stage_id == stage_id
             ).first()
             
-            # Debug log result
-            if alias:
-                print(f"Found exact alias: {alias.team_name} (ID: {alias.id})")
-            
-            # If not found, try to find any previous alias for this team
+            # If no exact match, try to find a general alias (stage_id is None)
             if not alias:
-                print("No exact alias found, looking for any previous alias...")
                 alias = TeamAlias.query.filter(
+                    TeamAlias.team_name == team_name,
                     TeamAlias.tournament_id == tournament.id,
-                    (TeamAlias.team_id == team_id) | (TeamAlias.team_name == team_id)
-                ).order_by(TeamAlias.stage_id.desc()).first()
-                
-                if alias:
-                    print(f"Found previous alias: {alias.team_name} (ID: {alias.id}) from stage {alias.stage_id}")
-                else:
-                    print(f"No alias found for team_id: {team_id}")
-                    
-            return alias
+                    TeamAlias.stage_id == None
+                ).first()
+            
+            # If we found an alias, use it, otherwise use the team name as is
+            return alias.team_name if alias else team_name
         
-        # Get stage ID, defaulting to 1 if not set
-        stage_id = getattr(game, 'stage_id', 1)
-        # Ensure stage_id is an integer
-        stage_id = int(stage_id) if stage_id is not None else 1
+        # Set display names for the template
+        game.team1_display = get_team_display(team1_name, game.stage_id)
+        game.team2_display = get_team_display(team2_name, game.stage_id)
         
-        # Debug log game info
-        print(f"Processing game {game.id}: {game.team1} vs {game.team2} (Stage {stage_id})")
-        
-        # Get aliases for both teams
-        team1_alias = get_team_alias(game.team1, stage_id) if game.team1 else None
-        team2_alias = get_team_alias(game.team2, stage_id) if game.team2 else None
-        
-        # Function to process team name with dynamic references
-        def process_team_name(team_id, team_alias):
-            if not team_id:
-                return 'TBD', False, None
-                
-            # Check if this is a dynamic reference (e.g., W(S1R1M1) or L(S1R1M1))
-            if isinstance(team_id, str) and ((team_id.startswith('W(') or team_id.startswith('L(')) and team_id.endswith(')')):
-                ref_type = 'Winner' if team_id.startswith('W(') else 'Loser'
-                # Try to resolve the reference
-                resolved_id, resolved_name, pending_info = resolve_team_reference(tournament.id, team_id)
-                
-                if resolved_id and resolved_name:
-                    # If we have a resolved team, get its alias for display
-                    alias = TeamAlias.query.filter_by(
-                        tournament_id=tournament.id,
-                        team_id=resolved_id
-                    ).first()
-                    display_name = alias.team_name if alias else resolved_name
-                    return display_name, False, None
-                elif pending_info:
-                    # If pending, show what we're waiting for in a more readable format
-                    ref_str = format_reference(team_id)
-                    return f"{ref_type} of {ref_str}", True, pending_info
-                
-            # Default to alias or raw ID
-            if team_alias and hasattr(team_alias, 'team_name'):
-                return team_alias.team_name, False, None
-            return team_id or 'TBD', False, None
-        
-        # Process both teams
-        team1_name, team1_pending, team1_info = process_team_name(game.team1, team1_alias)
-        team2_name, team2_pending, team2_info = process_team_name(game.team2, team2_alias)
-        
-        # Create a dictionary with the game data and display names
-        game_data = {
-            'id': game.id,
-            'team1': team1_name,
-            'team2': team2_name,
-            'team1_pending': team1_pending,
-            'team2_pending': team2_pending,
-            'team1_info': team1_info,
-            'team2_info': team2_info,
-            'round_number': game.round_number,
-            'stage_id': stage_id,
-            'room': getattr(game, 'room', ''),
-            'moderator': getattr(game, 'moderator', ''),
-            'result': getattr(game, 'result', None),
-            'scorecard': getattr(game, 'scorecard', None)
-        }
-        processed_games.append(game_data)
+        # Add stage and round information
+        game.stage_name = f"Stage {game.stage_id}" if game.stage_id else "Prelims"
+        game.round_name = f"Round {game.round_number}" if game.round_number else "Unknown Round"
     
-    # Debug: Print the first few games to verify data
-    print("\n=== DEBUG: Processed Games ===")
-    for i, g in enumerate(processed_games[:5]):  # Print first 5 games
-        print(f"Game {i+1} - ID: {g['id']}, Result: {g.get('result')}, Team1: {g['team1']}, Team2: {g['team2']}")
+    # If no games found for this room, show a message
+    if not games:
+        flash(f'No games found for Room {room_number}. Please check back later.', 'info')
+        return render_template('reader/tournament_games.html', 
+                             tournament=tournament, 
+                             games=games,
+                             room_number=room_number)
     
-    return render_template('tournament_games.html', 
+    return render_template('reader/tournament_games.html', 
                          tournament=tournament, 
-                         games=processed_games)
+                         games=games,
+                         room_number=room_number)
 
 def resolve_team_reference(tournament_id, team_ref, depth=0, max_depth=5):
     """
@@ -503,7 +573,7 @@ def submit_game(game_id):
             
             for p in alias_players:
                 print(f"    - Player: {p.name} (ID: {p.id}, Alias ID: {p.alias_id})")
-                players.append(p.name)
+                players.append({'id': p.id, 'name': p.name})
         
         # If no players found through aliases, try direct team_id match
         if not players:
@@ -515,7 +585,7 @@ def submit_game(game_id):
             print(f"Found {len(direct_players)} players by direct team_id match")
             for p in direct_players:
                 print(f"  - {p.name} (ID: {p.id}, Team ID: {p.team_id})")
-                players.append(p.name)
+                players.append({'id': p.id, 'name': p.name})
         
         # If still no players, try matching by team name as a last resort
         if not players and team_name and team_name != f"Team {team_number}":
@@ -534,9 +604,25 @@ def submit_game(game_id):
                 
                 for p in alias_players:
                     print(f"  - {p.name} (ID: {p.id}, Team: {alias.team_name})")
-                    players.append(p.name)
+                    players.append({'id': p.id, 'name': p.name})
         
-        return list(dict.fromkeys(players))  # Remove duplicates while preserving order
+        # Convert list of names to list of player objects with unique IDs
+        unique_players = []
+        seen_ids = set()
+        
+        for player in players:
+            if isinstance(player, dict):
+                if player['id'] not in seen_ids:
+                    seen_ids.add(player['id'])
+                    unique_players.append(player)
+            else:
+                # For backward compatibility with string player names
+                player_id = hash(player)  # Generate a simple hash for the ID
+                if player_id not in seen_ids:
+                    seen_ids.add(player_id)
+                    unique_players.append({'id': player_id, 'name': player})
+        
+        return unique_players
     
     # Get players for both teams
     players_team1 = get_players_for_team(team1_id, team1_display_name, 1) if team1_id else []
@@ -675,6 +761,7 @@ def submit_game(game_id):
             'original_team2': game.team2,  # Keep original reference
             'round_number': game.round_number,
             'stage_id': game.stage_id if hasattr(game, 'stage_id') else 1,
+            'tournament_id': tournament.id,  # Add tournament_id for use in templates
             'tournament_name': tournament.name,
             'is_resolved': all([
                 not isinstance(team1_id, str) or not team1_id.startswith('W(') or team1_id == team1_display_name,
@@ -722,50 +809,192 @@ def submit_game(game_id):
             players_team2=players_team2,
             questions=formatted_questions,
             bonuses=formatted_bonuses[:20],  # Only take the first 20 bonuses
-            scorecard=json.loads(game.scorecard) if game.scorecard else []
+            scorecard=json.loads(game.scorecard) if game.scorecard else [],
+            team1_display_name=team1_display_name,
+            team2_display_name=team2_display_name,
+            pending_team1_info=pending_team1_info,
+            pending_team2_info=pending_team2_info
         )
     
     # Handle POST request (form submission)
     elif request.method == 'POST':
         try:
-            data = request.get_json()
+            # Ensure the request has JSON data
+            if not request.is_json:
+                return jsonify({'error': 'Request must be JSON'}), 400
+                
+            data = request.get_json(silent=True)
+            if not data:
+                return jsonify({'error': 'Invalid JSON data'}), 400
+            
+            print(f"Received data: {data}")  # Debug log
             
             # Validate the scorecard data
             if 'scorecard' not in data or not isinstance(data['scorecard'], list):
+                print(f"Invalid scorecard data: {data.get('scorecard')}")  # Debug log
                 return jsonify({'error': 'Invalid scorecard data'}), 400
             
-            # Update the game's scorecard
+            # Update the game's scorecard with the raw data
             game.scorecard = json.dumps(data['scorecard'])
             
             # Calculate total scores
             team1_score = 0
             team2_score = 0
             
+            # Handle the new scorecard format
             for cycle in data['scorecard']:
-                # Tossup points
-                if cycle['tossup']['team'] == 1:
-                    team1_score += cycle['tossup']['points'] or 0
-                elif cycle['tossup']['team'] == 2:
-                    team2_score += cycle['tossup']['points'] or 0
+                if not isinstance(cycle, dict):
+                    continue
                 
-                # Bonus points (only if a team got the tossup)
-                if cycle['tossup']['team']:
-                    bonus_points = sum(cycle['bonus'])
-                    if cycle['tossup']['team'] == 1:
-                        team1_score += bonus_points
-                    else:
-                        team2_score += bonus_points
+                # Calculate team scores from player points
+                if 'team1' in cycle and isinstance(cycle['team1'], dict):
+                    team1_score += sum(int(points) for points in cycle['team1'].values() if str(points).lstrip('-').isdigit())
+                
+                if 'team2' in cycle and isinstance(cycle['team2'], dict):
+                    team2_score += sum(int(points) for points in cycle['team2'].values() if str(points).lstrip('-').isdigit())
+                
+                # Add bonus points if available
+                if 'bonusPoints' in cycle and isinstance(cycle['bonusPoints'], dict):
+                    bonus = cycle['bonusPoints']
+                    if 'team1' in bonus and isinstance(bonus['team1'], (int, float)):
+                        team1_score += int(bonus['team1'])
+                    if 'team2' in bonus and isinstance(bonus['team2'], (int, float)):
+                        team2_score += int(bonus['team2'])
+                
+                # Handle tossup results
+                if 'tossupResult' in cycle and isinstance(cycle['tossupResult'], dict):
+                    tossup = cycle['tossupResult']
+                    if 'team' in tossup and 'points' in tossup and isinstance(tossup['points'], (int, float)):
+                        if tossup['team'] == 1:
+                            team1_score += int(tossup['points'])
+                        elif tossup['team'] == 2:
+                            team2_score += int(tossup['points'])
+                
+                # Process all buzzes for additional points (like negs)
+                if 'allBuzzes' in cycle and isinstance(cycle['allBuzzes'], list):
+                    for buzz in cycle['allBuzzes']:
+                        if not isinstance(buzz, dict) or 'team' not in buzz or 'points' not in buzz:
+                            continue
+                        points = int(buzz['points']) if str(buzz['points']).lstrip('-').isdigit() else 0
+                        if buzz['team'] == 1:
+                            team1_score += points
+                        elif buzz['team'] == 2:
+                            team2_score += points
             
-            # Update game result
+            # Log the raw scorecard data for debugging
+            print("\n=== RAW SCORECARD DATA ===")
+            print(json.dumps(data['scorecard'], indent=2))
+            
+            # Log detailed score calculation
+            print("\n=== DETAILED SCORE CALCULATION ===")
+            
+            # Reset scores to ensure we're calculating from scratch
+            team1_score = 0
+            team2_score = 0
+            
+            # Process each cycle in the scorecard
+            for i, cycle in enumerate(data['scorecard'], 1):
+                print(f"\n--- Cycle {i} ---")
+                print(f"Cycle data: {json.dumps(cycle, indent=2)}")
+                
+                # Initialize cycle scores
+                cycle_team1 = 0
+                cycle_team2 = 0
+                
+                # Process team1 player points (from sample_scorecard.json format)
+                if 'team1' in cycle and isinstance(cycle['team1'], dict):
+                    for player_id, points in cycle['team1'].items():
+                        if isinstance(points, (int, float)) or (isinstance(points, str) and points.lstrip('-').isdigit()):
+                            points_int = int(points)
+                            cycle_team1 += points_int
+                            print(f"  Team 1 Player {player_id}: {points_int} points")
+                
+                # Process team2 player points (from sample_scorecard.json format)
+                if 'team2' in cycle and isinstance(cycle['team2'], dict):
+                    for player_id, points in cycle['team2'].items():
+                        if isinstance(points, (int, float)) or (isinstance(points, str) and points.lstrip('-').isdigit()):
+                            points_int = int(points)
+                            cycle_team2 += points_int
+                            print(f"  Team 2 Player {player_id}: {points_int} points")
+                
+                # Process bonus points (from sample_scorecard.json format)
+                if 'team1Bonus' in cycle and isinstance(cycle['team1Bonus'], (int, float, str)):
+                    bonus = int(cycle['team1Bonus']) if str(cycle['team1Bonus']).lstrip('-').isdigit() else 0
+                    cycle_team1 += bonus
+                    print(f"  Team 1 Bonus: {bonus} points")
+                
+                if 'team2Bonus' in cycle and isinstance(cycle['team2Bonus'], (int, float, str)):
+                    bonus = int(cycle['team2Bonus']) if str(cycle['team2Bonus']).lstrip('-').isdigit() else 0
+                    cycle_team2 += bonus
+                    print(f"  Team 2 Bonus: {bonus} points")
+                
+                # Process buzzes to determine tossup results (from sample_scorecard.json format)
+                if 'buzzes' in cycle and isinstance(cycle['buzzes'], dict):
+                    # Find the first correct buzz to determine which team got the tossup
+                    correct_buzzes = [
+                        (float(percent), result) 
+                        for percent, result in cycle['buzzes'].items() 
+                        if result == 'Correct' and percent.replace('.', '').isdigit()
+                    ]
+                    
+                    if correct_buzzes:
+                        # Sort by percentage to find the first correct buzz
+                        correct_buzzes.sort()
+                        first_correct = correct_buzzes[0][1]
+                        
+                        # Check which team has the correct answer
+                        if cycle_team1 > 0:
+                            print(f"  Team 1 got the tossup: {cycle_team1} points")
+                        elif cycle_team2 > 0:
+                            print(f"  Team 2 got the tossup: {cycle_team2} points")
+                    
+                    # Process all buzzes for negs
+                    for percent, result in cycle['buzzes'].items():
+                        if result == 'Incorrect' and percent.replace('.', '').isdigit():
+                            # Find which team made the incorrect buzz
+                            if cycle_team1 < 0:
+                                print(f"  Team 1 incorrect buzz: {cycle_team1} points")
+                            elif cycle_team2 < 0:
+                                print(f"  Team 2 incorrect buzz: {cycle_team2} points")
+                
+                # Add cycle scores to totals
+                team1_score += cycle_team1
+                team2_score += cycle_team2
+                print(f"Cycle {i} totals - Team 1: {cycle_team1}, Team 2: {cycle_team2}")
+            
+            # Update game scores with calculated values
             game.team1_score = team1_score
             game.team2_score = team2_score
             
+            # Log final scores and result determination
+            print("\n=== FINAL SCORE CALCULATION ===")
+            print(f"Team 1 Total Score: {team1_score}")
+            print(f"Team 2 Total Score: {team2_score}")
+            
+            # Determine the game result with detailed logging
             if team1_score > team2_score:
-                game.result = 1  # Team 1 wins
+                game.result = 1  # Team 1 (first team in DB) wins
+                print("RESULT: Team 1 wins (result = 1)")
             elif team2_score > team1_score:
-                game.result = -1  # Team 2 wins
+                game.result = -1  # Team 2 (second team in DB) wins
+                print("RESULT: Team 2 wins (result = -1)")
             else:
-                game.result = 0  # Tie
+                # Check if all questions have been used (tie with no tiebreakers left)
+                total_questions = len(questions) if questions else 0
+                questions_used = len([cycle for cycle in data['scorecard'] 
+                                   if cycle.get('tossupResult', {}).get('team') is not None])
+                
+                print(f"Tie detected. Questions used: {questions_used}/{total_questions}")
+                
+                if questions_used >= total_questions:
+                    # All questions used and still a tie
+                    game.result = 0  # Declare a tie
+                    print("RESULT: All questions used - declaring a tie (result = 0)")
+                else:
+                    # Not all questions used, but we have a tie - this shouldn't normally happen
+                    game.result = 0  # Declare a tie as a fallback
+                    print("RESULT: Tie detected before all questions used - declaring a tie (result = 0)")
+                    print(f"WARNING: Unexpected tie after {questions_used} questions with {total_questions} total questions")
             
             db.session.commit()
             
@@ -811,6 +1040,204 @@ def get_game_questions(game_id):
         questions=tossups,
         bonuses=bonuses
     )
+
+@reader_bp.route('/api/teams/add_player', methods=['POST'])
+@login_required
+def add_player_to_team():
+    """
+    API endpoint to add a player to a team during a game.
+    Expected JSON payload:
+    {
+        'game_id': int,
+        'team_num': int (1 or 2),
+        'player_name': str,
+        'player_number': int (optional)
+    }
+    """
+    current_app.logger.info('\n=== START add_player_to_team ===')
+    
+    try:
+        # Log request details
+        current_app.logger.info(f"Request from user: {current_user.email if current_user.is_authenticated else 'Not authenticated'}")
+        current_app.logger.info(f"Request headers: {dict(request.headers)}")
+        current_app.logger.info(f"Request data: {request.get_data()}")
+        
+        # Get JSON data from request
+        data = request.get_json()
+        if not data:
+            current_app.logger.error('No JSON data received')
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+            
+        current_app.logger.info(f"Received data: {data}")
+            
+        # Validate required fields
+        required_fields = ['game_id', 'team_num', 'player_name']
+        for field in required_fields:
+            if field not in data:
+                current_app.logger.error(f'Missing required field: {field}')
+                return jsonify({'success': False, 'error': f'Missing required field: {field}'}), 400
+        
+        game_id = data['game_id']
+        team_num = data['team_num']
+        player_name = data['player_name'].strip()
+        player_number = data.get('player_number')
+        
+        current_app.logger.info(f'Attempting to add player to game {game_id}, team {team_num}')
+        current_app.logger.info(f'Player details - Name: "{player_name}", Number: {player_number}')
+        
+        # Validate team number
+        if team_num not in [1, 2]:
+            current_app.logger.error(f'Invalid team number: {team_num} (must be 1 or 2)')
+            return jsonify({'success': False, 'error': 'Team number must be 1 or 2'}), 400
+        
+        # Get the game
+        current_app.logger.info(f'Looking up game with ID: {game_id}')
+        game = Game.query.get(game_id)
+        if not game:
+            current_app.logger.error(f'Game not found: {game_id}')
+            return jsonify({'success': False, 'error': 'Game not found'}), 404
+        
+        current_app.logger.info(f'Found game: ID={game.id}, Team1={game.team1}, Team2={game.team2}')
+        
+        # Get the team name based on team number
+        team_name = game.team1 if team_num == 1 else game.team2
+        current_app.logger.info(f'Adding player to team {team_num} ({team_name})')
+        
+        # Format team ID as 'T1' or 'T2'
+        formatted_team_id = f"T{team_num}"
+        
+        # Find an existing player on the same team to get their alias_id
+        team_players = Player.query.filter(
+            Player.team_id == formatted_team_id
+        ).all()
+        
+        # Get alias_id from first teammate if available
+        alias_id = team_players[0].alias_id if team_players else None
+        
+        # Check for existing players with same name (case insensitive)
+        existing_players = Player.query.filter(
+            Player.team_id == formatted_team_id,
+            db.func.lower(Player.name) == player_name.lower()
+        ).all()
+        
+        if existing_players:
+            current_app.logger.warning(f'Player with name "{player_name}" already exists in team {team_num}')
+            return jsonify({
+                'success': False, 
+                'error': f'A player with the name "{player_name}" already exists in this team',
+                'existing_players': [p.id for p in existing_players]
+            }), 400
+        
+        # Create new player with same alias_id as teammates if available
+        current_app.logger.info('Creating new player record...')
+        new_player = Player(
+            name=player_name,
+            team_id=formatted_team_id,  # Store as 'T1' or 'T2'
+            alias_id=alias_id  # Use the same alias_id as other team members
+        )
+        current_app.logger.info(f'New player will use alias_id: {alias_id}')
+        
+        # Only set number if provided
+        if player_number is not None:
+            new_player.number = player_number
+        
+        current_app.logger.info(f'New player object: {new_player.__dict__}')
+        
+        db.session.add(new_player)
+        db.session.commit()
+        
+        current_app.logger.info(f'Successfully created player with ID: {new_player.id}')
+
+        return jsonify({
+            'success': True,
+            'player_id': new_player.id,
+            'player_name': new_player.name,
+            'team_id': formatted_team_id,
+            'team_name': team_name
+        })
+
+    except Exception as e:
+        current_app.logger.error(f'Error in add_player_to_team: {str(e)}', exc_info=True)
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+    finally:
+        current_app.logger.info('=== END add_player_to_team ===')
+
+@reader_bp.route('/api/game/<int:game_id>/players')
+@login_required
+def get_game_players(game_id):
+    """
+    API endpoint to get the list of players for both teams in a game.
+    Returns a JSON object with two arrays: team1 and team2.
+    """
+    current_app.logger.info(f"=== GET /api/game/{game_id}/players ===")
+    current_app.logger.info(f"Current user: {current_user.email if current_user.is_authenticated else 'Not authenticated'}")
+    
+    try:
+        current_app.logger.info(f"Looking up game with ID: {game_id}")
+        game = Game.query.get_or_404(game_id)
+        current_app.logger.info(f"Found game: {game.id} - Team1: {game.team1}, Team2: {game.team2}")
+        
+        # Get players for team 1
+        current_app.logger.info("Querying players for Team 1...")
+        players_team1 = Player.query.filter_by(
+            game_id=game_id,
+            team_num=1
+        ).order_by(Player.name).all()
+        current_app.logger.info(f"Found {len(players_team1)} players for Team 1")
+        
+        # Get players for team 2
+        current_app.logger.info("Querying players for Team 2...")
+        players_team2 = Player.query.filter_by(
+            game_id=game_id,
+            team_num=2
+        ).order_by(Player.name).all()
+        current_app.logger.info(f"Found {len(players_team2)} players for Team 2")
+        
+        # Log player details for debugging
+        for i, player in enumerate(players_team1, 1):
+            current_app.logger.debug(f"Team 1 Player {i}: ID={player.id}, Name={player.name}, Number={player.number}")
+            
+        for i, player in enumerate(players_team2, 1):
+            current_app.logger.debug(f"Team 2 Player {i}: ID={player.id}, Name={player.name}, Number={player.number}")
+        
+        # Convert to list of dicts for JSON serialization
+        team1_players = [{
+            'id': p.id,
+            'name': p.name,
+            'number': p.number
+        } for p in players_team1]
+        
+        team2_players = [{
+            'id': p.id,
+            'name': p.name,
+            'number': p.number
+        } for p in players_team2]
+        
+        response_data = {
+            'success': True,
+            'team1': team1_players,
+            'team2': team2_players,
+            'debug': {
+                'game_id': game_id,
+                'team1_count': len(team1_players),
+                'team2_count': len(team2_players)
+            }
+        }
+        
+        current_app.logger.info(f"Returning {len(team1_players)} team1 players and {len(team2_players)} team2 players")
+        return jsonify(response_data)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in get_game_players: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': 'Failed to fetch players',
+            'details': str(e)
+        }), 500
 
 # @reader_bp.route('/game/<int:game_id>')
 # def game_questions(game_id):

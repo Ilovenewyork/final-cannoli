@@ -8,6 +8,9 @@ from .player import Player
 from .question import Question
 from .team_alias import TeamAlias
 from .admin import Admin
+from .reader import Reader, ReaderTournament
+from .alert import Alert
+from .protest import Protest
 
 # Make models available at the package level
 __all__ = [
@@ -16,5 +19,9 @@ __all__ = [
     'Player',
     'Question',
     'TeamAlias',
-    'Admin'
+    'Admin',
+    'Alert',
+    'Reader',
+    'ReaderTournament',
+    'Protest'
 ]

@@ -1,4 +1,4 @@
-# modules/docx-to-txt.py
+# modules/docx_to_txt.py
 # Converts a docx file to a txt file while annotating bold, italic, and underlined parts.
 
 import docx
@@ -41,8 +41,12 @@ def main(input_file, output_file):
                         if line:
                             f.write(line + "\n")
 
-if __name__ == "__main__":
+def cli():
+    """Command line interface for the script"""
     if len(sys.argv) != 3:
-        print("Usage: python docx-to-txt.py input.docx output.txt")
+        print("Usage: python docx_to_txt.py input.docx output.txt")
         sys.exit(1)
     main(sys.argv[1], sys.argv[2])
+
+if __name__ == "__main__":
+    cli()

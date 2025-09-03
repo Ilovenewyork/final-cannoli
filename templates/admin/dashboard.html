@@ -24,42 +24,44 @@
           <p class="mt-1 max-w-2xl text-sm text-gray-500">Fill in the details below to create a new tournament</p>
         </div>
         <div class="px-4 py-5 sm:p-6">
-          <form action="{{ url_for('admin.create_tournament') }}" method="post" class="space-y-6">
+          <form method="post" class="space-y-6">
+            {{ form.hidden_tag() }}
             <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
               <div class="sm:col-span-6 md:col-span-3">
-                <label for="name" class="block text-sm font-medium text-gray-700">Tournament Name</label>
-                <input type="text" name="name" id="name" required 
-                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                {{ form.name.label(class="block text-sm font-medium text-gray-700") }}
+                {{ form.name(class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm") }}
+                {% for error in form.name.errors %}
+                  <p class="mt-1 text-sm text-red-600">{{ error }}</p>
+                {% endfor %}
               </div>
               
               <div class="sm:col-span-6 md:col-span-3">
-                <label for="date" class="block text-sm font-medium text-gray-700">Date</label>
-                <input type="date" name="date" id="date" required 
-                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                {{ form.date.label(class="block text-sm font-medium text-gray-700") }}
+                {{ form.date(type="date", class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm date-picker") }}
+                {% for error in form.date.errors %}
+                  <p class="mt-1 text-sm text-red-600">{{ error }}</p>
+                {% endfor %}
               </div>
               
               <div class="sm:col-span-6 md:col-span-3">
-                <label for="location" class="block text-sm font-medium text-gray-700">Location</label>
-                <input type="text" name="location" id="location" required 
-                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                {{ form.location.label(class="block text-sm font-medium text-gray-700") }}
+                {{ form.location(class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm") }}
+                {% for error in form.location.errors %}
+                  <p class="mt-1 text-sm text-red-600">{{ error }}</p>
+                {% endfor %}
               </div>
               
               <div class="sm:col-span-6 md:col-span-3">
-                <label for="format" class="block text-sm font-medium text-gray-700">Format</label>
-                <select id="format" name="format" required 
-                        class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                  {% for format in formats %}
-                    <option value="{{ format }}">{{ format }}</option>
-                  {% endfor %}
-                </select>
+                {{ form.format.label(class="block text-sm font-medium text-gray-700") }}
+                {{ form.format(class="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm") }}
+                {% for error in form.format.errors %}
+                  <p class="mt-1 text-sm text-red-600">{{ error }}</p>
+                {% endfor %}
               </div>
-            </div>
-            
-            <div class="flex justify-end">
-              <button type="submit" 
-                      class="ml-3 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                Create Tournament
-              </button>
+              
+              <div class="sm:col-span-6">
+                {{ form.submit(class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500") }}
+              </div>
             </div>
           </form>
         </div>
@@ -116,7 +118,10 @@
   // Set default date to today
   document.addEventListener('DOMContentLoaded', function() {
     const today = new Date().toISOString().split('T')[0];
-    document.getElementById('date').min = today;
+    const dateInput = document.getElementById('date');
+    if (dateInput) {
+      dateInput.min = today;
+    }
   });
 </script>
 {% endblock %}

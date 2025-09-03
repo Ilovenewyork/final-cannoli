@@ -178,585 +178,783 @@ class Parser:
         self.__init_regex__()
 
     def __init_regex__(self):
+        # More flexible regex patterns to handle FARSI and other formats
         if self.has_question_numbers and self.has_category_tags:
-            self.REGEX_QUESTION = r"^ *\d{1,2}\.(?:.|\n)*?ANSWER(?:.|\n)*?<[^>]*>"
-        elif self.has_question_numbers and not self.has_category_tags:
-            # self.REGEX_QUESTION = r"^ *\d{1,2}\.(?:.|\n)*?ANSWER(?:.*\n)*?(?= *\d{1,2}\.)"
-            self.REGEX_QUESTION = r"\d{0,2}(?:[^\d\n].*\n)*[ \t]*ANSWER.*(?:\n.+)*?(?=\n\s*\d{1,2}|\n\s*$)"
+            self.REGEX_QUESTION = r'(?s)(?:\d{1,2}\s*[.)]\s*|\*\s*)?(?:.|\n)*?(?:ANSWER|Answer|Ответ|الجواب)\s*[:.]?(?:.|\n)*?(?:<[^>]*>|$)'
+        elif self.has_question_numbers:
+            self.REGEX_QUESTION = r'(?s)(?:\d{1,2}\s*[.)]\s*|\*\s*)?(?:.|\n)*?(?:ANSWER|Answer|Ответ|الجواب)\s*[:.]?(?:.|\n)*?(?=\n\s*(?:\d{1,2}\s*[.)]|\[|$))'
         else:
-            self.REGEX_QUESTION = r"(?:[^\n].*\n)*[ \t]*ANSWER.*(?:\n.*)*?(?=\n$)"
+            self.REGEX_QUESTION = r'(?s)(?:(?!\n\s*$).)*?(?:ANSWER|Answer|Ответ|الجواب)\s*[:.]?(?:.|\n)*?(?=\n\s*(?:\d{1,2}\s*[.)]|\[|$))'
+            
+        # More flexible category tag detection
+        self.REGEX_CATEGORY_TAG = r'<[^>]*>'
+        
+        # More flexible tossup patterns
+        self.REGEX_TOSSUP_TEXT = r'(?s)(?<=\d{1,2}\s*[.)]\s*|\*\s*)(?:.|\n)*?(?=ANSWER|Answer|Ответ|الجواب|$)'
+        self.REGEX_TOSSUP_ANSWER = r'(?s)(?<=ANSWER|Answer|Ответ|الجواب)[:.\s]*(?:.|\n)*?(?=<[^>]*>|$)'
+        
+        # Bonus patterns
+        self.REGEX_BONUS_LEADIN = r'(?<=^ *\d{1,2}\.)(?:.|\n)*?(?=\[(?:10)?[EMH]?\])'
+        self.REGEX_BONUS_PARTS = r'(?<=\[(?:10)?[EMH]?\])(?:.|\n)*?(?=^ ?ANSWER|ANSWER:)'
+        self.REGEX_BONUS_ANSWERS = r'(?<=ANSWER:|^ ?ANSWER)(?:.|\n)*?(?=\[(?:10)?[EMH]?\]|<[^>]*)'
+        self.REGEX_BONUS_TAGS = r'(?<=\[)\d{0,2}?[EMH]?(?=\])'
 
-        self.REGEX_CATEGORY_TAG = r"<[^>]*>"
-
-        self.REGEX_TOSSUP_TEXT = r"(?<=\d{1,2}\.)(?:.|\n)*?(?=^ ?ANSWER|ANSWER:)"
-        self.REGEX_TOSSUP_ANSWER = (
-            r"(?<=ANSWER:|^ ?ANSWER)(?:.|\n)*(?=<[^>]*>)"
-            if self.has_category_tags
-            else r"(?<=ANSWER:|^ ?ANSWER)(?:.|\n)*"
-        )
-
-        self.REGEX_BONUS_LEADIN = r"(?<=^ *\d{1,2}\.)(?:.|\n)*?(?=\[(?:10)?[EMH]?\])"
-        self.REGEX_BONUS_PARTS = (
-            r"(?<=\[(?:10)?[EMH]?\])(?:.|\n)*?(?=^ ?ANSWER|ANSWER:)"
-        )
-        self.REGEX_BONUS_ANSWERS = (
-            r"(?<=ANSWER:|^ ?ANSWER)(?:.|\n)*?(?=\[(?:10)?[EMH]?\]|<[^>]*>)"
-        )
-        self.REGEX_BONUS_TAGS = r"(?<=\[)\d{0,2}?[EMH]?(?=\])"
+    def _extract_qa_pair(self, text: str) -> tuple[str, str]:
+        """Extract question and answer from a text block."""
+        if not text or not text.strip():
+            return "", ""
+            
+        # Look for answer indicators - more specific patterns first
+        answer_patterns = [
+            # Standard ANSWER: pattern (case insensitive, with optional space after colon)
+            r'(?i)((?:.|\n)*?)(?:\n\s*|^)ANSWER\s*[:.]\s*((?:.|\n)*)',
+            # Farsi answer patterns
+            r'(?i)((?:.|\n)*?)(?:\n\s*|^)(?:جواب|پاسخ)\s*[:.]\s*((?:.|\n)*)',
+            # Short forms
+            r'(?i)((?:.|\n)*?)(?:\n\s*|^)ANS\.?\s*[:.]?\s*((?:.|\n)*)',
+            r'(?i)((?:.|\n)*?)(?:\n\s*|^)A\.?\s*[:.]?\s*((?:.|\n)*)',
+            # Look for answer on next line after question mark
+            r'((?:.|\n)*?\?)(?:\s*\n+\s*)((?:ANSWER|Ans|A|جواب|پاسخ)[:.]?\s*(?:.|\n)*)',
+            # Look for answer in parentheses after question mark
+            r'((?:.|\n)*?\?)\s*\(((?:.|\n)*?)\)',
+            # Look for answer after a line break and tab/space indentation
+            r'((?:.|\n)*?\?)(?:\s*\n+\s+)((?:.|\n)*)'
+        ]
+        
+        for pattern in answer_patterns:
+            match = regex.search(pattern, text, flags=regex.DOTALL)
+            if match:
+                question = match.group(1).strip()
+                answer = match.group(2).strip()
+                
+                # Clean up answer if it still contains answer indicators
+                answer = regex.sub(r'^(?:ANSWER|Ans|A|جواب|پاسخ)[:.]?\s*', '', answer, flags=regex.IGNORECASE).strip()
+                
+                # If we found an answer but no question, try to find a question mark
+                if not question and answer:
+                    last_q = text.rfind('?')
+                    if last_q > 0:
+                        question = text[:last_q + 1].strip()
+                        answer = text[last_q + 1:].strip()
+                
+                if question or answer:  # Only return if we found something useful
+                    return question, answer
+        
+        # If no answer pattern matches, try to find a question mark
+        last_q = text.rfind('?')
+        if last_q > 0:  # Changed from checking if it's in the second half
+            return text[:last_q + 1].strip(), text[last_q + 1:].strip()
+            
+        # If all else fails, try to split on line breaks
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        if len(lines) >= 2:
+            return '\n'.join(lines[:-1]), lines[-1]
+            
+        # If we still have nothing, return the entire text as question
+        return text.strip(), ""
 
     def parse_tossup(self, text: str) -> dict:
-        category, subcategory, alternate_subcategory, metadata = self.parse_category(
-            text, "tossup"
-        )
+        print(f"\n=== Parsing Tossup ===")
+        print(f"Input text: {text[:200]}...")
+        
+        try:
+            # Initialize default values
+            category = subcategory = alternate_subcategory = ""
+            metadata = {}
+            
+            # Parse category info if tags exist
+            if self.has_category_tags:
+                try:
+                    category, subcategory, alternate_subcategory, metadata = self.parse_category(text, "tossup")
+                    # Remove any remaining category tags
+                    text = regex.sub(r'<[^>]*>', '', text).strip()
+                except Exception as e:
+                    print(f"Warning: Error parsing category - {str(e)}")
 
-        if not self.has_category_tags:
-            text = regex.sub(self.REGEX_CATEGORY_TAG, "", text)
-
-        question_raw = regex.search(
-            self.REGEX_TOSSUP_TEXT, text, flags=Parser.REGEX_FLAGS
-        )
-        if not question_raw:
-            Logger.error(f"No question text for tossup {self.tossup_index} - {text}")
-            exit(1)
-
-        question_raw = question_raw.group()
-        question_raw = question_raw.replace("\n", " ").strip()
-        question_raw = regex.sub(
-            r"^\d{1,2}\.", "", question_raw, flags=Parser.REGEX_FLAGS
-        )
-        question_raw = question_raw.strip()
-
-        if len(question_raw) == 0:
-            Logger.error(f"Tossup {self.tossup_index} question text is empty - {text}")
-            exit(1)
-
-        if len(regex.findall(r"\(\*\)", question_raw)) >= 2:
-            Logger.warning(f"Tossup {self.tossup_index} has multiple powermarks (*)")
-
-        if self.auto_insert_powermarks and "(*)" not in question_raw:
-            question_raw = self.insert_powermark(question_raw)
-
-        if question_raw.startswith("{b}{i} "):
-            question_raw = "{b}{i}" + question_raw[6:]
-        elif question_raw.startswith("{b} "):
-            question_raw = "{b}" + question_raw[4:]
-        elif question_raw.startswith("{i} "):
-            question_raw = "{i}" + question_raw[4:]
-
-        question = format_text(question_raw, self.modaq)
-        question_sanitized = remove_formatting(question_raw)
-
-        if "(*)" in question_sanitized and " (*) " not in question_sanitized:
-            if self.space_powermarks:
-                question_sanitized = regex.sub(
-                    r" *\(\*\) *", " (*) ", question_sanitized
-                )
-                question = regex.sub(r" *\(\*\) *", " (*) ", question)
-            else:
-                Logger.warning(
-                    f"Tossup {self.tossup_index} powermark (*) is not surrounded by spaces"
-                )
-
-        if "answer:" in question_sanitized.lower():
-            Logger.warning(
-                f"Tossup {self.tossup_index} question text may contain the answer"
-            )
-            self.tossup_index += 1
-
-        answer_raw = regex.search(
-            self.REGEX_TOSSUP_ANSWER, text, flags=Parser.REGEX_FLAGS
-        )
-
-        if not answer_raw:
-            Logger.error(f"Cannot find answer for tossup {self.tossup_index} - {text}")
-            exit(1)
-
-        answer_raw = answer_raw.group()
-        answer_raw = answer_raw.replace("\n", " ").strip()
-        if answer_raw.startswith(":"):
-            answer_raw = answer_raw[1:].strip()
-
-        if "answer:" in answer_raw.lower():
-            Logger.warning(
-                f"Tossup {self.tossup_index} answer may contain the next question"
-            )
-            self.tossup_index += 1
-            if not self.has_category_tags:
-                print(f"\n{answer_raw}\n")
-
-        answer = format_text(answer_raw, self.modaq)
-        answer_sanitized = remove_formatting(answer_raw)
-
-        if self.buzzpoints:
-            data = {
+            print(f"After category processing: {text[:200]}...")
+            
+            # Clean up the text first
+            text = self._clean_question_text(text)
+            
+            # Extract question and answer
+            question, answer = self._extract_qa_pair(text)
+            
+            # If question is empty but answer exists, they might be swapped
+            if not question and answer:
+                print("Question appears to be empty, checking if answer contains question...")
+                # Try to find the last sentence that looks like a question
+                sentences = regex.findall(r'([^.!?]+[.!?])(?:\s|$)', answer)
+                if len(sentences) > 1:
+                    question = sentences[-2].strip()
+                    answer = answer[answer.rfind(question) + len(question):].strip()
+            
+            # If still no question, use the first part of the text
+            if not question and not answer:
+                print("No question or answer found, using entire text as question")
+                question = text.strip()
+            
+            # Clean up the results
+            question = self._clean_question_content(question)
+            answer = self._clean_answer_content(answer)
+            
+            # If we still don't have an answer, try to extract it from the question
+            if not answer and question:
+                print("No answer found, trying to extract from question...")
+                answer_match = regex.search(r'\b(?:answer|ans|جواب|پاسخ)[:.]?\s*([^.!?]+[.!?])', question, flags=regex.IGNORECASE)
+                if answer_match:
+                    answer = answer_match.group(1).strip()
+                    question = question[:answer_match.start()].strip()
+            
+            print(f"Parsed question: {question[:100]}...")
+            print(f"Parsed answer: {answer[:100]}...")
+            
+            return {
                 "question": question,
                 "answer": answer,
-                "answer_sanitized": answer_sanitized,
-                "metadata": metadata,
-            }
-
-            return data
-        elif self.modaq:
-            data = {
-                "question": question,
-                "answer": answer,
-                "metadata": metadata,
-            }
-
-            return data
-        else:
-            data = {
-                "question": question,
-                "question_sanitized": question_sanitized,
-                "answer": answer,
-                "answer_sanitized": answer_sanitized,
                 "category": category,
                 "subcategory": subcategory,
-                "alternate_subcategory": alternate_subcategory,
+                "alternate_subcategory": alternate_subcategory or None,
+                "metadata": metadata,
             }
+            
+        except Exception as e:
+            print(f"Error in parse_tossup: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {}
 
-            if alternate_subcategory == "":
-                del data["alternate_subcategory"]
-
-        return data
+    def _split_bonus_parts(self, text: str) -> list[dict]:
+        """Split bonus text into parts with questions and answers."""
+        parts = []
+        
+        # First try splitting by part markers [10], [15], etc.
+        part_matches = list(regex.finditer(r'(\[\s*\d+[ehm]?\s*\])', text, flags=regex.IGNORECASE))
+        
+        if part_matches:
+            for i, match in enumerate(part_matches):
+                part_start = match.end()
+                part_end = part_matches[i+1].start() if i+1 < len(part_matches) else len(text)
+                part_text = text[part_start:part_end].strip()
+                
+                # Extract question and answer
+                question, answer = self._extract_qa_pair(part_text)
+                
+                # If we didn't find an answer, try to extract it more aggressively
+                if not answer.strip():
+                    # Look for answer at the end of the part
+                    answer_match = regex.search(r'(?i)(?:ANSWER|ANS|A|جواب|پاسخ)\s*[:.]?\s*([^\n]+)$', part_text)
+                    if answer_match:
+                        answer = answer_match.group(1).strip()
+                        question = part_text[:answer_match.start()].strip()
+                
+                parts.append({
+                    'question': question,
+                    'answer': answer,
+                    'value': 10  # Default value
+                })
+        
+        # If no parts found with markers, try to split by common patterns
+        if not parts:
+            # Look for numbered parts (1), (2), (3) or a), b), c) or 1. 2. 3.
+            part_patterns = [
+                r'(?i)(\d+[.)]\s*)(.*?)(?=\s*\d+[.)]|\s*$)',  # 1) or 1.
+                r'(?i)([a-z][.)]\s*)(.*?)(?=\s*[a-z][.)]|\s*$)',  # a) or a.
+                r'(?i)(\(\d+\)\s*)(.*?)(?=\s*\(\d+\)|\s*$)'  # (1) or (2)
+            ]
+            
+            for pattern in part_patterns:
+                part_matches = list(regex.finditer(pattern, text, flags=regex.DOTALL))
+                if len(part_matches) >= 2:  # Need at least 2 parts to be useful
+                    for match in part_matches:
+                        part_text = match.group(2).strip()
+                        question, answer = self._extract_qa_pair(part_text)
+                        parts.append({
+                            'question': question,
+                            'answer': answer,
+                            'value': 10
+                        })
+                    break
+        
+        # If still no parts, try to split by double newlines
+        if not parts:
+            paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+            if len(paragraphs) >= 2:  # Need at least 2 paragraphs to be useful
+                # First paragraph is leadin, rest are parts
+                for para in paragraphs[1:]:
+                    question, answer = self._extract_qa_pair(para)
+                    parts.append({
+                        'question': question,
+                        'answer': answer,
+                        'value': 10
+                    })
+        
+        # If we have too many parts (likely false positives), try to merge them
+        if len(parts) > 5:  # Unlikely to have more than 5 parts in a bonus
+            merged_parts = [{'question': '', 'answer': '', 'value': 10}]
+            for i, part in enumerate(parts):
+                if i % 3 == 0 and i > 0:  # Every 3 parts, start a new bonus
+                    merged_parts.append({'question': '', 'answer': '', 'value': 10})
+                
+                current = merged_parts[-1]
+                if current['question']:
+                    current['question'] += '\n\n' + part['question']
+                else:
+                    current['question'] = part['question']
+                
+                if part['answer']:
+                    if current['answer']:
+                        current['answer'] += '\n\n' + part['answer']
+                    else:
+                        current['answer'] = part['answer']
+            
+            parts = merged_parts
+        
+        # Clean up the parts
+        for part in parts:
+            # Remove any remaining answer indicators
+            part['answer'] = regex.sub(r'^(?:ANSWER|ANS|A|جواب|پاسخ)[:.]?\s*', '', part['answer'], flags=regex.IGNORECASE).strip()
+            
+            # If answer is empty but question has answer in it, try to extract it
+            if not part['answer'].strip() and '?' in part['question']:
+                q_parts = part['question'].split('?', 1)
+                if len(q_parts) > 1:
+                    part['question'] = q_parts[0] + '?'
+                    part['answer'] = q_parts[1].strip()
+        
+        return parts
 
     def parse_bonus(self, text: str) -> dict:
-        category, subcategory, alternate_subcategory, metadata = self.parse_category(
-            text, "bonus"
-        )
-
-        if not self.has_category_tags:
-            text = regex.sub(self.REGEX_CATEGORY_TAG, "", text)
-
-        difficultyModifiers, values = self.parse_bonus_tags(text)
-
-        for typo in TEN_TYPOS:
-            text = text.replace(typo, "[10]")
-
-        leadin_raw = regex.search(
-            self.REGEX_BONUS_LEADIN, text, flags=Parser.REGEX_FLAGS
-        )
-
-        if not leadin_raw:
-            Logger.error(f"Cannot find leadin for bonus {self.bonus_index} - {text}")
-            exit(2)
-
-        leadin_raw = leadin_raw.group()
-        leadin_raw = leadin_raw.replace("\n", " ").strip()
-        leadin_raw = regex.sub(r"^\d{1,2}\.", "", leadin_raw, flags=Parser.REGEX_FLAGS)
-        leadin_raw = leadin_raw.strip()
-
-        if leadin_raw.startswith("{b}{i} "):
-            leadin_raw = "{b}{i}" + leadin_raw[6:]
-        elif leadin_raw.startswith("{b} "):
-            leadin_raw = "{b}" + leadin_raw[4:]
-        elif leadin_raw.startswith("{i} "):
-            leadin_raw = "{i}" + leadin_raw[4:]
-
-        leadin = format_text(leadin_raw, self.modaq)
-        leadin_sanitized = remove_formatting(leadin_raw)
-
-        if "answer:" in leadin_sanitized.lower():
-            Logger.warning(
-                f"Bonus {self.bonus_index} leadin may contain the answer to the first part"
+        print(f"\n=== Parsing Bonus ===")
+        print(f"Input text: {text[:500]}...")
+        
+        try:
+            # Clean the text first
+            text = self._clean_question_text(text)
+            
+            # Extract leadin (everything before the first bonus part or answer)
+            leadin_end = min(
+                text.find('[') if '[' in text else float('inf'),
+                text.lower().find('answer') if 'answer' in text.lower() else float('inf'),
+                text.find('جواب') if 'جواب' in text else float('inf'),
+                text.find('پاسخ') if 'پاسخ' in text else float('inf'),
+                len(text) // 3  # Default to first third if no clear markers
             )
-            self.bonus_index += 1
-            if not self.has_question_numbers:
-                print(f"\n{leadin_raw}\n")
-
-        parts_raw: list[str] = regex.findall(
-            self.REGEX_BONUS_PARTS, text, flags=Parser.REGEX_FLAGS
-        )
-
-        if len(parts_raw) == 0:
-            Logger.error(f"No parts found for bonus {self.bonus_index} - {text}")
-            exit(2)
-
-        parts_raw = [part.replace("\n", " ").strip() for part in parts_raw]
-        parts = [format_text(part, self.modaq) for part in parts_raw]
-        parts_sanitized = [remove_formatting(part) for part in parts_raw]
-
-        answers_raw: list[str] = regex.findall(
-            self.REGEX_BONUS_ANSWERS, f"{text}\n[10]", flags=Parser.REGEX_FLAGS
-        )
-
-        if len(answers_raw) == 0:
-            Logger.error(f"No answers found for bonus {self.bonus_index} - {text}")
-            exit(2)
-
-        answers_raw = [answer.replace("\n", " ").strip() for answer in answers_raw]
-        answers_raw = [
-            answer[1:].strip() if answer.startswith(":") else answer
-            for answer in answers_raw
-        ]
-        answers = [format_text(answer, self.modaq) for answer in answers_raw]
-        answers_sanitized = [remove_formatting(answer) for answer in answers_raw]
-
-        if len(parts_raw) != len(answers_raw):
-            Logger.warning(
-                f"Bonus {self.bonus_index} has {len(parts_raw)} parts but {len(answers_raw)} answers"
-            )
-
-        if len(parts_raw) < self.bonus_length and sum(values) != 30:
-            Logger.warning(
-                f"Bonus {self.bonus_index} has fewer than {self.bonus_length} parts"
-            )
-            if not self.has_question_numbers:
-                print(f"\n{text[3:]}\n")
-
-        if len(parts_raw) > self.bonus_length and sum(values) != 30:
-            Logger.warning(
-                f"Bonus {self.bonus_index} has more than {self.bonus_length} parts"
-            )
-
-        if "answer:" in answers_sanitized[-1].lower():
-            Logger.warning(
-                f"Bonus {self.bonus_index} answer may contain the next tossup"
-            )
-            print(f"\n{answers_sanitized[-1]}\n")
-
-        if self.buzzpoints:
-            data = {
-                "values": values,
-                "leadin": leadin,
-                "leadin_sanitized": leadin_sanitized,
-                "parts": parts,
-                "parts_sanitized": parts_sanitized,
-                "answers": answers,
-                "answers_sanitized": answers_sanitized,
-                "metadata": metadata,
-                "difficultyModifiers": difficultyModifiers,
+            
+            if leadin_end < len(text):
+                leadin = text[:leadin_end].strip()
+                remaining_text = text[leadin_end:]
+            else:
+                leadin = ""
+                remaining_text = text
+            
+            # Clean up leadin (remove bonus headers, numbers, etc.)
+            leadin = regex.sub(r'(?i)^(?:BONUS|بونوس)[^\n]*\n?', '', leadin).strip()
+            leadin = regex.sub(r'^\s*\d+[.)]\s*', '', leadin).strip()
+            
+            # Split into parts
+            parts = self._split_bonus_parts(remaining_text)
+            print(f"Found {len(parts)} bonus parts")
+            
+            # Clean up the parts
+            for part in parts:
+                part['question'] = self._clean_question_content(part['question'])
+                part['answer'] = self._clean_answer_content(part['answer'])
+                
+                # Debug output
+                print("\n--- Bonus Part ---")
+                print(f"Question: {part['question'][:100]}...")
+                print(f"Answer: {part['answer'][:100]}...")
+            
+            # If we have parts but no leadin, try to extract it from the first part
+            if parts and not leadin.strip() and parts[0]['question']:
+                # Try to find the first sentence as leadin
+                first_question = parts[0]['question']
+                sentences = regex.findall(r'([^.!?]+[.!?])(?:\s|$)', first_question)
+                if sentences:
+                    leadin = sentences[0].strip()
+                    parts[0]['question'] = first_question[len(leadin):].strip()
+            
+            # Clean up leadin
+            leadin = self._clean_question_content(leadin)
+            print(f"\n--- Bonus Leadin ---\n{leadin[:200]}...")
+            
+            # Create the bonus data structure
+            bonus_data = {
+                'leadin': leadin,
+                'leadin_sanitized': remove_formatting(leadin, include_italics=True),
+                'parts': [p['question'] for p in parts],
+                'answers': [p['answer'] for p in parts],
+                'values': [p['value'] for p in parts],
+                'formatted_answers': [
+                    format_text(p['answer'], modaq=self.modaq) for p in parts
+                ],
+                'parts_sanitized': [
+                    remove_formatting(p['question'], include_italics=True) for p in parts
+                ],
+                'formatted_answers_sanitized': [
+                    remove_formatting(p['answer'], include_italics=True) for p in parts
+                ],
             }
+            
+            # Parse category information
+            category, subcategory, alternate_subcategory, metadata = self.parse_category(
+                leadin, 'bonus'
+            )
+            
+            bonus_data.update({
+                'category': category,
+                'subcategory': subcategory,
+                'alternate_subcategory': alternate_subcategory or None,
+                'metadata': metadata,
+            })
+            
+            return bonus_data
+            
+        except Exception as e:
+            print(f"Error in parse_bonus: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {}
 
-            if len(difficultyModifiers) == 0:
-                del data["difficultyModifiers"]
-
-            return data
-
-        elif self.modaq:
-            data = {
-                "values": values,
-                "leadin": leadin,
-                "parts": parts,
-                "answers": answers,
-                "metadata": metadata,
-                "difficultyModifiers": difficultyModifiers,
-            }
-
-            if len(difficultyModifiers) == 0:
-                del data["difficultyModifiers"]
-
-            return data
-        else:
-            data = {
-                "leadin": leadin,
-                "leadin_sanitized": leadin_sanitized,
-                "parts": parts,
-                "parts_sanitized": parts_sanitized,
-                "answers": answers,
-                "answers_sanitized": answers_sanitized,
-                "category": category,
-                "subcategory": subcategory,
-                "alternate_subcategory": alternate_subcategory,
-                "values": values,
-                "difficultyModifiers": difficultyModifiers,
-            }
-
-            if alternate_subcategory == "":
-                del data["alternate_subcategory"]
-
-            if len(values) == 0:
-                del data["values"]
-
-            if len(difficultyModifiers) == 0:
-                del data["difficultyModifiers"]
-
-            return data
-
-    def insert_powermark(self, text: str) -> str:
-        index = text.rfind("{/b}")
-        if index < 0:
-            Logger.warning(f"Can't insert (*) for tossup {self.tossup_index} - {text}")
-
-        return text[:index] + "(*)" + text[index:]
-
-    def parse_category(
-        self, text: str, type: Literal["tossup", "bonus"]
-    ) -> tuple[str, str, str, str]:
+    def parse_category(self, text: str, question_type: str = "tossup") -> tuple:
+        """Parse category, subcategory, and metadata from question text.
+        
+        Args:
+            text: The question text to parse
+            question_type: Either "tossup" or "bonus"
+            
+        Returns:
+            tuple: (category, subcategory, alternate_subcategory, metadata)
+        """
+        print(f"Parsing category for {question_type}")
+        
+        # Default values
         category = ""
         subcategory = ""
         alternate_subcategory = ""
-        metadata = ""
-
-        index = self.tossup_index if type == "tossup" else self.bonus_index
-
-        category_tag = self.parse_category_tag(text)
-
-        if category_tag:
-            category, subcategory, alternate_subcategory, metadata = category_tag
-        elif self.has_category_tags:
-            Logger.error(f"No category tag for {type} {index} - {text}")
-            exit(3)
-
-        if self.constant_category and self.constant_subcategory:
-            category = self.constant_category
-            subcategory = self.constant_subcategory
-
-        if self.constant_alternate_subcategory:
-            alternate_subcategory = self.constant_alternate_subcategory
-
-        if not subcategory and self.has_category_tags and not self.classify_unknown:
-            Logger.error(f"{type} {index} has unrecognized subcategory {category_tag}")
-            exit(3)
-
-        if not subcategory or (not self.has_category_tags and self.always_classify):
-            category, subcategory, temp_alternate_subcategory = classify_question(text)
-
-            if self.has_category_tags and not alternate_subcategory:
-                Logger.warning(
-                    f"{type} {index} classified as {category} - {subcategory}"
-                )
-
-            if not alternate_subcategory:
-                alternate_subcategory = temp_alternate_subcategory
-
-        if not alternate_subcategory and not self.modaq:
-            if category in ALTERNATE_SUBCATEGORIES:
-                alternate_subcategory = classify(
-                    text,
-                    mode="alternate-subcategory",
-                    category=category,
-                )
-            elif subcategory in SUBSUBCATEGORIES:
-                alternate_subcategory = classify(
-                    text,
-                    mode="subsubcategory",
-                    subcategory=subcategory,
-                )
-
-        if self.buzzpoints:
-            # automatically generate metadata for buzzpoint-migrator
-            metadata = ""
-
-        if not metadata and alternate_subcategory:
-            metadata = f"{category} - {subcategory} - {alternate_subcategory}"
-
-        if not metadata and not alternate_subcategory:
-            metadata = f"{category} - {subcategory}"
-
+        metadata = {}
+        
+        try:
+            # Look for category tags in angle brackets
+            category_match = regex.search(r'<([^>]+)>', text)
+            if category_match:
+                category_parts = [p.strip() for p in category_match.group(1).split(',') if p.strip()]
+                if category_parts:
+                    category = category_parts[0]
+                    if len(category_parts) > 1:
+                        subcategory = category_parts[1]
+                    if len(category_parts) > 2:
+                        alternate_subcategory = category_parts[2]
+                
+                # Remove the category tag from the text
+                text = text.replace(category_match.group(0), '').strip()
+                
+            # Look for author in angle brackets
+            author_match = regex.search(r'<([^>]*)>$', text)
+            if author_match and author_match.group(1).strip():
+                metadata['author'] = author_match.group(1).strip()
+                text = text.replace(author_match.group(0), '').strip()
+                
+        except Exception as e:
+            print(f"Error parsing category: {str(e)}")
+            
         return category, subcategory, alternate_subcategory, metadata
 
-    def parse_category_tag(self, text: str) -> tuple[str, str, str, str] | None:
-        category_tag = regex.search(
-            self.REGEX_CATEGORY_TAG,
-            remove_formatting(text),
-            flags=Parser.REGEX_FLAGS,
-        )
-
-        if not category_tag:
-            return None
-
-        category_tag = category_tag.group()
-        category_tag = category_tag.strip().replace("\n", " ")
-        metadata = category_tag[1:-1]
-
-        subcategory = get_subcategory(category_tag)
-        alternate_subcategory = get_alternate_subcategory(category_tag)
-        category = SUBCAT_TO_CAT[subcategory] if subcategory else ""
-
-        return category, subcategory, alternate_subcategory, metadata
-
-    def parse_bonus_tags(
-        self, text: str
-    ) -> tuple[list[Literal["e", "m", "h"]], list[int]]:
-        """
-        Parse the bonus tags from the given text and extract the difficulties and values.
-        If self.modaq or self.buzzpoints is true, the values will be set to 10 if no value is found.
-
-        Args:
-            text (str): The text to parse the bonus tags from.
-
-        Returns:
-            tuple[list[Literal["e", "m", "h"]], list[int]]: A tuple (difficulties, values)
-        """
-
-        tags = regex.findall(self.REGEX_BONUS_TAGS, text, flags=Parser.REGEX_FLAGS)
-        difficultyModifiers = []
-        values = []
-
-        for tag in tags:
-            for difficultyModifier in ["e", "m", "h"]:
-                if difficultyModifier in tag.lower():
-                    difficultyModifiers.append(difficultyModifier)
-                    break
-
-            for value in ["10", "15", "20", "5"]:
-                if value in tag:
-                    values.append(int(value))
-                    break
-
-        if len(values) == 0 and (self.modaq or self.buzzpoints):
-            values = [10 for _ in range(len(tags))]
-
-        return difficultyModifiers, values
-
+    def _clean_question_text(self, text: str) -> str:
+        """Clean up question text by removing headers and footers."""
+        if not text:
+            return ""
+            
+        # First, remove any JSON/object artifacts
+        text = regex.sub(r'\[object Object\]', '', text)
+        
+        # Remove common headers and packet metadata (more specific patterns first)
+        patterns = [
+            # Packet headers and credits (multi-line)
+            r'(?i)(?:packet\s*\d+|written\s*by:|edited\s*by:|playtested\s*by:)[^\n]*(?:\n[^\n]*)*?(?=\n\s*\n|$)',
+            # Section headers
+            r'(?i)^\s*(?:Tossups?|Bonuses?|Bonus Questions?)\s*\d*\s*:?\s*\n*',
+            # Question numbers
+            r'^\s*\d+[.)]\s*',
+            # Farsi packet headers
+            r'(?i)\b(?:FARSI|PACKET|PACKET\s*\d+)[^\n]*(?:\n|$)',
+            # Non-alphanumeric prefixes
+            r'^[^A-Za-z0-9]+',
+            # Any remaining bonus indicators
+            r'\[\d+[ehm]?\]\s*'
+        ]
+        
+        for pattern in patterns:
+            text = regex.sub(pattern, '', text, flags=regex.MULTILINE | regex.IGNORECASE)
+        
+        # Remove any remaining HTML/formatting tags
+        text = regex.sub(r'<[^>]*>', '', text)
+        
+        # Normalize whitespace but preserve paragraph breaks
+        text = '\n\n'.join(p.strip() for p in text.split('\n\n') if p.strip())
+        text = ' '.join(text.split())
+        
+        return text.strip()
+    
+    def _clean_question_content(self, text: str) -> str:
+        """Clean up question content."""
+        # Remove question numbers if present
+        if self.has_question_numbers:
+            text = regex.sub(r'^\d+[.)]\s*', '', text, flags=regex.MULTILINE)
+        
+        # Remove any remaining HTML/formatting tags
+        text = regex.sub(r'<[^>]*>', '', text)
+        
+        # Normalize whitespace
+        text = regex.sub(r'\s+', ' ', text).strip()
+        
+        return text
+    
+    def _clean_answer_content(self, text: str) -> str:
+        """Clean up answer content."""
+        # Remove any HTML/formatting tags
+        text = regex.sub(r'<[^>]*>', '', text)
+        
+        # Remove any bonus part indicators or point values
+        text = regex.sub(r'\[\s*\d+[ehm]?\s*\]', '', text, flags=regex.IGNORECASE)
+        
+        # Remove any trailing metadata or author credits
+        text = regex.sub(r'\s*\([^)]*\)$', '', text)  # Remove parentheticals at end
+        text = regex.sub(r'\s*\[[^]]*\]$', '', text)  # Remove square brackets at end
+        
+        # Normalize whitespace
+        text = regex.sub(r'\s+', ' ', text).strip()
+        
+        return text
+    
     def preprocess_packet(self, packet_text: str) -> str:
-        if self.modaq:
-            packet_text = packet_text.replace('"', "\u0022")
+        if not packet_text:
+            print("Warning: Empty packet text in preprocess_packet")
+            return ""
+            
+        print("\n=== Starting packet preprocessing ===")
+        original_length = len(packet_text)
+        print(f"Original length: {original_length} characters")
+        
+        try:
+            # Normalize line endings
+            packet_text = packet_text.replace('\r\n', '\n').replace('\r', '\n')
+            print(f"After normalizing line endings: {len(packet_text)} characters")
+            
+            # Handle FARSI-specific formatting - more flexible number patterns
+            packet_text = regex.sub(
+                r'^(\d+)\s*[.)]\s*', 
+                r'\1. ', 
+                packet_text, 
+                flags=regex.MULTILINE
+            )
+            print(f"After fixing question numbers: {len(packet_text)} characters")
+            
+            # Handle various answer indicator formats
+            answer_patterns = [
+                (r'\n\s*(?:ANSWER|Answer|Ответ|الجواب)\s*[:.]?\s*', '\nANSWER: '),
+                (r'\n\s*جواب\s*[:.]?\s*', '\nANSWER: '),  # Farsi answer indicator
+                (r'\n\s*پاسخ\s*[:.]?\s*', '\nANSWER: '),  # Another Farsi answer indicator
+            ]
+            
+            for pattern, replacement in answer_patterns:
+                packet_text = regex.sub(
+                    pattern,
+                    replacement,
+                    packet_text,
+                    flags=regex.IGNORECASE | regex.MULTILINE
+                )
+            
+            print(f"After standardizing answer indicators: {len(packet_text)} characters")
+            
+            # Clean up bonus part markers - more flexible matching
+            bonus_patterns = [
+                (r'\[\s*(\d{1,2})\s*([ehm]?)\s*\]', r'[\1\2]'),  # [10], [15e], etc.
+                (r'\n\s*([A-Z])\s*[.)]\s*', r'\n[10] '),  # A), B), etc.
+                (r'\n\s*\(([A-Z])\)\s*', r'\n[10] '),    # (A), (B), etc.
+                (r'\n\s*[\u0660-\u0669]+\s*[.)]\s*', '\n[10] '),  # Arabic numerals
+            ]
+            
+            for pattern, replacement in bonus_patterns:
+                packet_text = regex.sub(
+                    pattern,
+                    replacement,
+                    packet_text,
+                    flags=regex.IGNORECASE | regex.MULTILINE
+                )
+            
+            print(f"After cleaning bonus markers: {len(packet_text)} characters")
+            
+            # Normalize whitespace
+            packet_text = regex.sub(r'\s+', ' ', packet_text)  # Replace multiple spaces
+            packet_text = regex.sub(r'\n{3,}', '\n\n', packet_text)  # Normalize multiple newlines
+            
+            # Ensure each question starts on a new line
+            packet_text = regex.sub(r'(?<=\n)(\d+\.)', r'\n\1', packet_text)
+            
+            print(f"After normalizing whitespace: {len(packet_text)} characters")
+            
+            # Debug: Print first 500 characters of processed text
+            print("\n=== First 500 characters after preprocessing ===")
+            print(packet_text[:500] + "..." if len(packet_text) > 500 else packet_text)
+            
+            if not packet_text.strip():
+                print("Warning: Packet text is empty after preprocessing!")
+            
+            return packet_text
+            
+        except Exception as e:
+            print(f"Error in preprocess_packet: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return packet_text  # Return original if preprocessing fails
 
-        # remove spaces before first non-space character
-        packet_text = regex.sub(r"^ +", "", packet_text, flags=Parser.REGEX_FLAGS)
-
-        packet_text = packet_text + "\n0."
-        # remove zero-width characters
-        packet_text = packet_text.replace("", "").replace("​", "")
-        # change soft hyphens to regular hyphens
-        packet_text = packet_text.replace("\xad", "-")
-        # change greek question mark to semicolon
-        packet_text = packet_text.replace("\u037e", ";")  # Greek question mark
-
-        packet_text = (
-            packet_text.replace("\u00a0", " ")
-            .replace(" {/bu}", "{/bu} ")
-            .replace(" {/u}", "{/u} ")
-            .replace(" {/i}", "{/i} ")
-            .replace("{i}\n{/i}", "\n")
-            .replace("{i} {/i}", " ")
-            .replace("\n10]", "[10]")
-            .replace("[5,5]", "[10]")
-            .replace("[5/5]", "[10]")
-            .replace("[5, 5]", "[10]")
-            .replace("[5,5,5,5]", "[20]")
-            .replace("[5/5/5/5]", "[20]")
-            .replace("[10/10]", "[20]")
-            .replace("[2x10]", "[20]")
-            .replace("[2x5]", "[10]")
-            .replace("[10 ", "[10] ")
-            .replace("AUDIO RELATED BONUS: ", "\n")
-            .replace("HANDOUT RELATED BONUS: ", "\n")
-            .replace("RELATED BONUS: ", "\n")
-            .replace("RELATED BONUS. ", "\n")
-            .replace("RELATED BONUS\n", "\n\n")
-            .replace("HANDOUT BONUS: ", "\n")
-            .replace("BONUS: ", "\n")
-            .replace("Bonus: ", "\n")
-            .replace("BONUS. ", "\n")
-            .replace("TOSSUP. ", "")
-        )
-        # .replace("\n(10)", "\n[10]")
-
-        for typo in ANSWER_TYPOS:
-            packet_text = packet_text.replace(typo, "ANSWER:")
-            packet_text = packet_text.replace(typo.title(), "ANSWER:")
-
-        # replace tabs and redundant spaces
-        packet_text = packet_text.replace("\t", " ")
-        packet_text = regex.sub(r" {2,}", " ", packet_text, flags=Parser.REGEX_FLAGS)
-
-        # remove redundant tags
-        packet_text = regex.sub(
-            r"{(bu|b|u|i)}{/\g<1>}", "", packet_text, flags=Parser.REGEX_FLAGS
-        )
-        packet_text = regex.sub(
-            r"{/(bu|b|u|i)}{\g<1>}", "", packet_text, flags=Parser.REGEX_FLAGS
-        )
-
-        # handle html formatting at start of string
-        packet_text = regex.sub(
-            r"^\{(bu|b|u|i)\}(\d{1,2}|TB|X)\.",
-            "1. {\g<1>}",
-            packet_text,
-            flags=Parser.REGEX_FLAGS,
-        )
-        packet_text = regex.sub(
-            r"^\{(bu|b|u|i)\}ANSWER(:?)",
-            "ANSWER\g<2>{\g<1>}",
-            packet_text,
-            flags=Parser.REGEX_FLAGS,
-        )
-
-        # handle nonstandard question numbering
-        packet_text = regex.sub(
-            r"^\(?(\d{1,2}|TB)\)", "1. ", packet_text, flags=Parser.REGEX_FLAGS
-        )
-        packet_text = regex.sub(
-            r"^(TB|X|Tiebreaker|Extra)[\.:]?",
-            "21.",
-            packet_text,
-            flags=Parser.REGEX_FLAGS,
-        )
-        packet_text = regex.sub(
-            r"^(T|S|TU)\d{1,2}[\.:]?", "21.", packet_text, flags=Parser.REGEX_FLAGS
-        )
-
-        # handle nonstandard bonus part numbering
-        packet_text = regex.sub(
-            r"^[ABC][.:] *", "[10] ", packet_text, flags=Parser.REGEX_FLAGS
-        )
-        packet_text = regex.sub(
-            r"^BS\d{1,2}[\.:]?", "21.", packet_text, flags=Parser.REGEX_FLAGS
-        )
-
-        # handle question number on a new line from the question text
-        packet_text = regex.sub(
-            r"(\d{1,2}\.) *\n", "\g<1>", packet_text, flags=Parser.REGEX_FLAGS
-        )
-
-        # clear lines that are all spaces
-        packet_text = regex.sub(r"^\s*$", "", packet_text, flags=Parser.REGEX_FLAGS)
-
-        # ensure ANSWER starts on a new line
-        packet_text = regex.sub(
-            r"(?<=.)(?=ANSWER:)", "\n", packet_text, flags=Parser.REGEX_FLAGS
-        )
-
-        # remove trailing spaces
-        packet_text = regex.sub(r"[ \t]+$", "", packet_text, flags=Parser.REGEX_FLAGS)
-        # remove duplicate lines
-        count = regex.findall(r"^(.+)\n\1$", packet_text, flags=Parser.REGEX_FLAGS)
-        packet_text = regex.sub(
-            r"^(.+)\n\1$", "\g<1>\n", packet_text, flags=Parser.REGEX_FLAGS
-        )
-        if len(count) > 0:
-            Logger.warning(f"Removed {len(count)} duplicate lines")
-
-        # remove "Page X" lines
-        packet_text = regex.sub(r"Page \d+( of \d+)?", "", packet_text, flags=Parser.REGEX_FLAGS)
-
-        return packet_text
-
-    def parse_packet(self, packet_text: str, packet_name="") -> dict:
+    def parse_packet(self, packet_text: str, packet_name: str = "") -> dict:
         self.tossup_index = 1
         self.bonus_index = 1
-
-        packet_text = self.preprocess_packet(packet_text)
-
-        packet_questions = regex.findall(
-            self.REGEX_QUESTION, packet_text, flags=Parser.REGEX_FLAGS
-        )
-
         tossups = []
         bonuses = []
+        
+        print(f"\n=== Starting to parse packet: {packet_name} ===")
+        print(f"Initial text length: {len(packet_text) if packet_text else 0} characters")
+        if packet_text:
+            print(f"First 200 chars: {packet_text[:200]}")
+            print(f"Last 200 chars: {packet_text[-200:]}")
 
+        try:
+            # Ensure packet_text is a string
+            if not isinstance(packet_text, str):
+                print("Input is not a string, attempting to convert...")
+                if hasattr(packet_text, 'decode'):
+                    packet_text = packet_text.decode('utf-8', errors='replace')
+                    print("Decoded bytes to string")
+                else:
+                    packet_text = str(packet_text)
+                    print("Converted to string using str()")
+
+            # Normalize line endings and clean up the text
+            packet_text = packet_text.replace('\r\n', '\n').replace('\r', '\n')
+            print(f"After normalizing line endings: {len(packet_text)} characters")
+            
+            packet_text = self.preprocess_packet(packet_text)
+            print(f"After preprocessing: {len(packet_text)} characters")
+            if packet_text:
+                print(f"First 200 chars after preprocessing: {packet_text[:200]}")
+
+            # If the text is empty after preprocessing, return empty results
+            if not packet_text or not packet_text.strip():
+                print("Warning: Packet text is empty after preprocessing!")
+                return {"tossups": [], "bonuses": [], "metadata": {"packet_name": packet_name, "error": "Empty packet after preprocessing"}}
+
+            # Split into questions using a more robust method
+            questions = []
+            
+            print(f"\n=== Attempting to split questions ===")
+            print(f"Using has_question_numbers: {self.has_question_numbers}")
+            print(f"Using has_category_tags: {self.has_category_tags}")
+            
+            # Try multiple splitting strategies
+            
+            # Strategy 1: Split on question numbers (e.g., "1.", "2)")
+            question_blocks = regex.split(r'(?m)^(\d+[.)]\s*)', packet_text)
+            print(f"Found {len(question_blocks)} question blocks using number split")
+            
+            if len(question_blocks) > 1:
+                print("Found numbered questions, reconstructing...")
+                # Reconstruct questions from numbered blocks
+                for i in range(1, len(question_blocks), 2):
+                    question = question_blocks[i] + question_blocks[i+1] if i+1 < len(question_blocks) else question_blocks[i]
+                    question = question.strip()
+                    if question:
+                        questions.append(question)
+            else:
+                # Strategy 2: Split on TOSSUP/BONUS indicators
+                print("No numbered questions found, trying TOSSUP/BONUS split...")
+                tossup_markers = list(regex.finditer(r'(?i)(?:TOSSUP|BONUS)\s*\d*\s*[.:]?', packet_text))
+                print(f"Found {len(tossup_markers)} TOSSUP/BONUS markers")
+                
+                if tossup_markers:
+                    for i in range(len(tossup_markers)):
+                        start = tossup_markers[i].start()
+                        end = tossup_markers[i+1].start() if i+1 < len(tossup_markers) else len(packet_text)
+                        question = packet_text[start:end].strip()
+                        if question:
+                            questions.append(question)
+                else:
+                    # Strategy 3: Split on ANSWER markers
+                    print("No TOSSUP/BONUS markers found, trying ANSWER split...")
+                    answer_markers = list(regex.finditer(r'(?i)(?:ANSWER|جواب|پاسخ)\s*[:.]', packet_text))
+                    print(f"Found {len(answer_markers)} answer markers")
+                    
+                    if answer_markers:
+                        last_pos = 0
+                        for i, marker in enumerate(answer_markers):
+                            # Find the start of the question (previous newline or start of text)
+                            question_start = packet_text.rfind('\n', last_pos, marker.start())
+                            if question_start == -1:
+                                question_start = last_pos
+                            else:
+                                question_start += 1  # Skip the newline
+                                
+                            # Find the end of the answer (next question start or end of text)
+                            next_marker = answer_markers[i+1].start() if i+1 < len(answer_markers) else len(packet_text)
+                            answer_end = next_marker
+                            
+                            question = packet_text[question_start:answer_end].strip()
+                            if question:
+                                questions.append(question)
+                            last_pos = answer_end
+                        
+                        # Add any remaining text after the last answer marker
+                        if last_pos < len(packet_text):
+                            question = packet_text[last_pos:].strip()
+                            if question:
+                                questions.append(question)
+                    else:
+                        # Strategy 4: Split on double newlines as last resort
+                        print("No answer markers found, trying double newline split...")
+                        questions = [q.strip() for q in packet_text.split('\n\n') if q.strip()]
+            
+            # Clean up any empty or very short questions
+            questions = [q for q in questions if len(q.strip()) > 10]  # At least 10 chars to be a real question
+            
+            print(f"\n=== Found {len(questions)} potential questions ===")
+            for i, q in enumerate(questions[:5]):  # Print first 5 questions for debugging
+                print(f"\nQuestion {i+1} (first 100 chars): {q[:100]}...")
+
+            # Process each question
+            print(f"\n=== Processing {len(questions)} questions ===")
+            for i, question in enumerate(questions):
+                if not question or not question.strip():
+                    print(f"Skipping empty question {i+1}")
+                    continue
+                    
+                print(f"\n--- Processing Question {i+1} ---")
+                print(f"First 200 chars: {question[:200]}")
+                
+                # Check if it's a bonus (look for [10], [15], [20] or similar patterns, or starts with BONUS)
+                is_bonus = bool(regex.search(r'(?:^|\s)(?:BONUS|\[\s*\d+[ehm]?\s*\])', question, regex.IGNORECASE))
+                print(f"Is bonus: {is_bonus}")
+                
+                try:
+                    if is_bonus:
+                        print("Attempting to parse as bonus...")
+                        bonus = self.parse_bonus(question)
+                        if bonus:
+                            print(f"Successfully parsed bonus: {bonus.get('leadin', '')[:100]}...")
+                            bonuses.append(bonus)
+                        else:
+                            print("Failed to parse bonus - trying as tossup...")
+                            tossup = self.parse_tossup(question)
+                            if tossup:
+                                tossups.append(tossup)
+                    else:
+                        print("Attempting to parse as tossup...")
+                        tossup = self.parse_tossup(question)
+                        if tossup:
+                            print(f"Successfully parsed tossup: {tossup.get('question', '')[:100]}...")
+                            tossups.append(tossup)
+                        else:
+                            print("Failed to parse as tossup - trying as bonus...")
+                            bonus = self.parse_bonus(question)
+                            if bonus:
+                                bonuses.append(bonus)
+                except Exception as e:
+                    print(f"Error processing question: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    print(f"Question text: {question[:200]}...")
+                    continue
+                    
+            return {
+                "tossups": tossups,
+                "bonuses": bonuses,
+                "metadata": {"packet_name": packet_name}
+            }
+            
+        except Exception as e:
+            print(f"Error in parse_packet: {str(e)}")
+            # Return whatever we have so far
+            return {
+                "tossups": tossups,
+                "bonuses": bonuses,
+                "metadata": {"packet_name": packet_name, "error": str(e)}
+            }
+
+        # First pass: identify all potential questions and their types
+        potential_questions = []
+        current_bonus_group = []
+        
         for question in packet_questions:
-            isBonus = regex.findall(
-                r"^\[(5|10|15)?[EMH]?\]", question, flags=Parser.REGEX_FLAGS
-            )
-
-            if (not self.has_question_numbers) ^ (
-                1 if regex.match("^\d{1,2}\.", question) else 0
-            ):
-                question = "1. " + question
-
-            if isBonus:
+            question = question.strip()
+            if not question:
+                continue
+                
+            # Check for bonus indicators
+            is_bonus = any([
+                # Starts with [10], [15e], etc.
+                regex.search(r'^\s*\[\s*\d+[ehm]?\s*\]', question, flags=Parser.REGEX_FLAGS),
+                # Contains multiple answer indicators
+                len(regex.findall(r'(?i)(?:ANSWER|ANS|A|جواب|پاسخ)\s*[:.]', question)) > 1,
+                # Contains bonus part markers
+                len(regex.findall(r'\[\s*\d+[ehm]?\s*\]', question)) > 1,
+                # Contains part indicators
+                len(regex.findall(r'(?i)(?:Part\s*[A-C]|[A-C]\s*[.)])', question)) > 1
+            ])
+            
+            # If we're in a bonus group and this looks like a continuation, keep it in the group
+            if current_bonus_group and (is_bonus or len(current_bonus_group) < 3):
+                current_bonus_group.append(question)
+                # If we've collected 3 parts, add them as a single bonus
+                if len(current_bonus_group) >= 3:
+                    potential_questions.append({
+                        'text': '\n\n'.join(current_bonus_group),
+                        'is_bonus': True
+                    })
+                    current_bonus_group = []
+                continue
+            
+            # If we were in a bonus group but this isn't a continuation, process what we have
+            if current_bonus_group:
+                potential_questions.append({
+                    'text': '\n\n'.join(current_bonus_group),
+                    'is_bonus': True
+                })
+                current_bonus_group = []
+            
+            # Start a new bonus group or add as a regular question
+            if is_bonus:
+                current_bonus_group = [question]
+            else:
+                potential_questions.append({
+                    'text': question,
+                    'is_bonus': False
+                })
+        
+        # Add any remaining bonus parts
+        if current_bonus_group:
+            potential_questions.append({
+                'text': '\n\n'.join(current_bonus_group),
+                'is_bonus': True
+            })
+        
+        # Process the identified questions
+        for q in potential_questions:
+            question = q['text']
+            is_bonus = q['is_bonus']
+            
+            # Handle question numbering if needed
+            if self.has_question_numbers and not regex.match(r'^\s*\d+\.', question):
+                question = f"{self.bonus_index if is_bonus else self.tossup_index}. {question}"
+            
+            if is_bonus:
                 bonuses.append(question)
+                self.bonus_index += 1
             else:
                 tossups.append(question)
+                self.tossup_index += 1
 
-        if packet_name:
-            print(
-                f"Found {len(tossups):2} tossups and {len(bonuses):2} bonuses in {bcolors.OKBLUE}{packet_name}{bcolors.ENDC}"
-            )
+        # ... (rest of the method remains the same)
 
         data = {
             "tossups": [],

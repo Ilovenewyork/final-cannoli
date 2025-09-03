@@ -1,27 +1,64 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Games for Tournament | LIQBA</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="min-h-screen flex flex-col">
-  <!-- Navbar -->
-  <nav class="bg-gray-800 text-white p-4">
-    <div class="container mx-auto flex justify-between">
-      <a href="{{ url_for('index') }}" class="font-bold hover:underline">LIQBA</a>
-      <a href="{{ url_for('reader.select_tournament') }}" class="hover:underline">Back</a>
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Tournament: {{ tournament.name }}</h2>
+        <div>
+            <a href="{{ url_for('reader.dashboard') }}" class="btn btn-outline-secondary me-2">Back to Dashboard</a>
+            <a href="{{ url_for('reader.logout') }}" class="btn btn-outline-danger">Logout</a>
+        </div>
     </div>
-  </nav>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <div class="card mb-4">
+        <div class="card-header">
+            <h4 class="mb-0">Tournament Information</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <p><strong>Tournament:</strong> {{ tournament.name }}</p>
+                    <p><strong>Date:</strong> {{ tournament.date.strftime('%B %d, %Y') }}</p>
+                    <p><strong>Location:</strong> {{ tournament.location or 'N/A' }}</p>
+                </div>
+                <div class="col-md-4">
+                    <p><strong>Status:</strong> {{ tournament.status|title }}</p>
+                    <p><strong>Your Room:</strong> Room {{ room_number }}</p>
+                    <p><strong>Your Games:</strong> {{ games|length }}</p>
+                </div>
+                <div class="col-md-4">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        You are assigned to <strong>Room {{ room_number }}</strong>. 
+                        You can only view and score games in this room.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
   
-  <!-- Main Content -->
-  <main class="container mx-auto flex-grow p-6">
-    <h2 class="text-3xl font-bold mb-6">Games for Tournament: {{ tournament.name }}</h2>
-    <!-- Two search inputs -->
-    <div class="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <input type="text" id="roundSearch" placeholder="Search by round..." class="w-full border rounded px-3 py-2">
-      <input type="text" id="teamSearch" placeholder="Search by team..." class="w-full border rounded px-3 py-2">
+    <!-- Search and Filter -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-3 mb-md-0">
+                    <label for="roundSearch" class="form-label">Search by Round</label>
+                    <input type="text" id="roundSearch" class="form-control" placeholder="Enter round number...">
+                </div>
+                <div class="col-md-6">
+                    <label for="teamSearch" class="form-label">Search by Team</label>
+                    <input type="text" id="teamSearch" class="form-control" placeholder="Enter team name...">
+                </div>
+            </div>
+        </div>
     </div>
     <!-- Group games by stage and round -->
     {% set stage_groups = {} %}
@@ -35,19 +72,36 @@
       {% set _ = stage_groups[stage_round]['games'].append(game) %}
     {% endfor %}
     
-    <!-- Sort by stage_id and round_number -->
-    {% for (stage_id, round_num), group in stage_groups|dictsort %}
-      <div class="round-group mb-8" data-stage="{{ stage_id }}" data-round="{{ round_num }}">
-        <h3 class="text-2xl font-bold mb-2">{{ group.stage_name }} - Round {{ round_num }}</h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {% for game in group.games %}
-            <div class="game-card bg-white p-6 rounded shadow hover:shadow-lg transition-shadow" 
-                 data-round="{{ game.round_number }}" 
-                 data-stage="{{ game.stage_id }}"
-                 data-team="{{ (game.team1 ~ ' ' ~ game.team2)|lower }}">
-              <h4 class="text-xl font-semibold mb-2">
-                <div class="flex items-center">
-                  <span class="{% if game.team1_pending %}text-blue-600{% endif %}">
+    <!-- Games List -->
+    <div class="card">
+        <div class="card-header">
+            <h4 class="mb-0">Games</h4>
+        </div>
+        <div class="card-body">
+            {% set stage_groups = {} %}
+            {% for game in games %}
+                {% set stage_id = game.stage_id|default(1) %}
+                {% set stage_name = 'Prelims' if stage_id == 1 else ('Playoffs' if stage_id == 2 else 'Stage ' ~ stage_id) %}
+                {% set stage_round = (stage_id, game.round_number) %}
+                {% if stage_round not in stage_groups %}
+                    {% set _ = stage_groups.update({stage_round: {'stage_name': stage_name, 'games': []}}) %}
+                {% endif %}
+                {% set _ = stage_groups[stage_round]['games'].append(game) %}
+            {% endfor %}
+            
+            {% for (stage_id, round_num), group in stage_groups|dictsort %}
+                <div class="round-group mb-4" data-stage="{{ stage_id }}" data-round="{{ round_num }}">
+                    <h5 class="fw-bold mb-2">{{ group.stage_name }} - Round {{ round_num }}</h5>
+                    <div class="row g-3 mb-4">
+                        {% for game in group.games %}
+                            <div class="col-md-6">
+                                <div class="game-card card h-100" 
+                                     data-round="{{ game.round_number }}" 
+                                     data-stage="{{ game.stage_id }}"
+                                     data-team="{{ (game.team1 ~ ' ' ~ game.team2)|lower }}">
+                                    <div class="card-body">
+                                        <h6 class="card-title">
+                                            <span class="{% if game.team1_pending %}text-primary{% endif %}">
                     {{ game.team1 }}
                     {% if game.team1_pending and game.team1_info %}
                       <span class="text-sm font-normal text-gray-500 ml-1">(pending)</span>
@@ -146,8 +200,58 @@
   </script>
   
   <!-- Footer -->
-  <footer class="bg-gray-900 text-gray-300 text-center p-4">
-    Copyright madhavendra thakur for the LIQBA
-  </footer>
-</body>
-</html>
+    <footer class="bg-gray-900 text-gray-300 py-8 mt-auto">
+      <div class="container mx-auto px-4 text-center">
+        <p>© 2025 LIQBA - All rights reserved</p>
+        <p class="text-sm text-gray-500 mt-2">Made with ❤️ by Madhavendra Thakur</p>
+      </div>
+    </footer>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// Filter function combining round and team queries
+function filterCards() {
+    const roundQuery = document.getElementById('roundSearch').value.toLowerCase();
+    const teamQuery = document.getElementById('teamSearch').value.toLowerCase();
+    
+    document.querySelectorAll('.game-card').forEach(card => {
+        const round = card.getAttribute('data-round') || '';
+        const team = card.getAttribute('data-team') || '';
+        const stage = card.getAttribute('data-stage') || '';
+        
+        const roundMatch = round.includes(roundQuery);
+        const teamMatch = team.includes(teamQuery);
+        
+        if ((!roundQuery || roundMatch) && (!teamQuery || teamMatch)) {
+            card.style.display = '';
+            // Show the parent round group if any card is visible
+            const roundGroup = card.closest('.round-group');
+            if (roundGroup) {
+                roundGroup.style.display = '';
+            }
+        } else {
+            card.style.display = 'none';
+            // Hide the parent round group if all cards are hidden
+            const roundGroup = card.closest('.round-group');
+            if (roundGroup) {
+                const visibleCards = roundGroup.querySelectorAll('.game-card:not([style*="display: none"])');
+                if (visibleCards.length === 0) {
+                    roundGroup.style.display = 'none';
+                }
+            }
+        }
+    });
+}
+
+// Add event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('roundSearch').addEventListener('input', filterCards);
+    document.getElementById('teamSearch').addEventListener('input', filterCards);
+});
+</script>
+{% endblock %}

@@ -1,5 +1,6 @@
 from extensions import db
 from sqlalchemy import ForeignKey, Column, Integer, String, Text
+from datetime import datetime
 
 class Game(db.Model):
     __tablename__ = 'game'
@@ -17,6 +18,7 @@ class Game(db.Model):
     # Relationships
     tournament = db.relationship('Tournament', back_populates='games')
     questions = db.relationship('Question', back_populates='game_rel', lazy=True, foreign_keys='Question.game_id')
+    alerts = db.relationship('Alert', back_populates='game', lazy='dynamic', cascade='all, delete-orphan')
     
     def __repr__(self):
         return f'<Game {self.team1} vs {self.team2} (Round {self.round_number})>'

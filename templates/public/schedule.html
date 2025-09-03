@@ -34,20 +34,47 @@
                   <table class="w-full border-collapse">
                     <thead>
                       <tr class="bg-gray-100">
+                        {% if teamname %}
+                        <th class="border p-3 text-left">Round</th>
+                        <th class="border p-3 text-left">Room</th>
+                        <th class="border p-3 text-left" colspan="2">Opponent</th>
+                        {% else %}
                         <th class="border p-3 text-left">Match #</th>
                         <th class="border p-3 text-left">Team 1</th>
                         <th class="border p-3 text-center">Score</th>
                         <th class="border p-3 text-center">vs</th>
                         <th class="border p-3 text-center">Score</th>
                         <th class="border p-3 text-right">Team 2</th>
+                        {% endif %}
                       </tr>
                     </thead>
                     <tbody>
-                      {% for match in rnd.matches %}
+                      {% if teamname %}
+                        {% for match in rnd.matches %}
+                        <tr class="hover:bg-gray-50 transition-colors group">
+                          <td class="border p-3 font-medium align-top">Round {{ rnd.round }}</td>
+                          <td class="border p-3 font-medium align-top">Room {{ match.match_number }}</td>
+                          <td class="border p-3 align-top" colspan="2">
+                            <div class="font-medium">
+                              <a href="{{ url_for('public.team_schedule', tournament_id=tournament.id, teamname=match.opponent|urlencode) }}" 
+                                 class="text-blue-600 hover:underline">
+                                {{ match.opponent }}
+                              </a>
+                            </div>
+                          </td>
+                        </tr>
+                        {% endfor %}
+                      {% else %}
+                        {% for match in rnd.matches %}
                         <tr class="{% if match.completed %}bg-green-50{% else %}hover:bg-gray-50{% endif %} transition-colors group">
                           <td class="border p-3 font-medium align-top">{{ match.match_number }}</td>
                           <td class="border p-3 align-top">
-                            <div class="font-medium">{{ match.teams[0] }}</div>
+                            <div class="font-medium">
+                              <a href="{{ url_for('public.team_schedule', tournament_id=tournament.id, teamname=match.teams[0]|urlencode) }}" 
+                                 class="text-blue-600 hover:underline">
+                                {{ match.teams[0] }}
+                              </a>
+                            </div>
                             {% if match.team1_players %}
                               <div class="mt-1 text-sm text-gray-600">
                                 {% for player in match.team1_players %}
@@ -64,7 +91,12 @@
                             {{ match.scores[1] }}
                           </td>
                           <td class="border p-3 align-top">
-                            <div class="font-medium">{{ match.teams[1] }}</div>
+                            <div class="font-medium text-right">
+                              <a href="{{ url_for('public.team_schedule', tournament_id=tournament.id, teamname=match.teams[1]|urlencode) }}" 
+                                 class="text-blue-600 hover:underline">
+                                {{ match.teams[1] }}
+                              </a>
+                            </div>
                             {% if match.team2_players %}
                               <div class="mt-1 text-sm text-gray-600">
                                 {% for player in match.team2_players %}
@@ -74,7 +106,8 @@
                             {% endif %}
                           </td>
                         </tr>
-                      {% endfor %}
+                        {% endfor %}
+                      {% endif %}
                     </tbody>
                   </table>
                 </div>
@@ -112,8 +145,11 @@
   </main>
 
   <!-- Footer -->
-  <footer class="bg-gray-900 text-gray-300 text-center p-4">
-    Copyright madhavendra thakur for the LIQBA
-  </footer>
+    <footer class="bg-gray-900 text-gray-300 py-8 mt-auto">
+      <div class="container mx-auto px-4 text-center">
+        <p>© 2025 LIQBA - All rights reserved</p>
+        <p class="text-sm text-gray-500 mt-2">Made with ❤️ by Madhavendra Thakur</p>
+      </div>
+    </footer>
 </body>
 </html>

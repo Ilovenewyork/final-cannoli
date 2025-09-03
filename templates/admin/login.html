@@ -1,49 +1,54 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Admin Login | LIQBA</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="min-h-screen flex flex-col">
-  <!-- Navbar -->
-  <nav class="bg-gray-800 text-white p-4">
-    <div class="container mx-auto">
-      <a href="{{ url_for('index') }}" class="font-bold hover:underline">LIQBA</a>
-    </div>
-  </nav>
+{% extends "base.html" %}
 
-  <!-- Main content -->
-  <main class="container mx-auto flex-grow p-6">
-    <div class="max-w-md mx-auto bg-white p-6 rounded shadow">
-      <h2 class="text-2xl font-bold mb-4 text-center">Admin Login</h2>
-      <form method="POST" class="space-y-4">
+{% block content %}
+<div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+  <div class="max-w-md w-full space-y-8">
+    <div>
+      <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+        Admin Login
+      </h2>
+    </div>
+    <form class="mt-8 space-y-6" method="POST">
+      {{ form.hidden_tag() }}
+      <div class="rounded-md shadow-sm -space-y-px">
         <div>
-          <label class="block font-medium">Username:</label>
-          <input type="text" name="username" required class="w-full border rounded px-3 py-2">
+          {{ form.username.label(class="sr-only") }}
+          {{ form.username(class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm" + (" border-red-500" if form.username.errors else ""), placeholder="Username", autofocus=true) }}
+          {% if form.username.errors %}
+            {% for error in form.username.errors %}
+              <p class="mt-1 text-sm text-red-600">{{ error }}</p>
+            {% endfor %}
+          {% endif %}
         </div>
         <div>
-          <label class="block font-medium">Password:</label>
-          <input type="password" name="password" required class="w-full border rounded px-3 py-2">
+          {{ form.password.label(class="sr-only") }}
+          {{ form.password(class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm" + (" border-red-500" if form.password.errors else ""), placeholder="Password") }}
+          {% if form.password.errors %}
+            {% for error in form.password.errors %}
+              <p class="mt-1 text-sm text-red-600">{{ error }}</p>
+            {% endfor %}
+          {% endif %}
         </div>
-        <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded">Login</button>
-      </form>
+      </div>
+
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-          <ul class="mt-4">
-            {% for category, message in messages %}
-              <li class="text-sm text-{{ category }}-500">{{ message }}</li>
-            {% endfor %}
-          </ul>
+          <div class="rounded-md bg-red-50 p-4">
+            <div class="flex">
+              <div class="ml-3">
+                {% for category, message in messages %}
+                  <p class="text-sm font-medium text-red-800">{{ message }}</p>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
         {% endif %}
       {% endwith %}
-    </div>
-  </main>
 
-  <!-- Footer -->
-  <footer class="bg-gray-900 text-gray-300 text-center p-4">
-    Copyright madhavendra thakur for the LIQBA
-  </footer>
-</body>
-</html>
+      <div>
+        {{ form.submit(class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500") }}
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
