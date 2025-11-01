@@ -23,6 +23,7 @@ class Tournament(db.Model):
     games = db.relationship('Game', back_populates='tournament', lazy=True, cascade='all, delete-orphan')
     questions = db.relationship('Question', back_populates='tournament_rel', lazy=True, foreign_keys='Question.tournament_id')
     team_aliases = db.relationship('TeamAlias', back_populates='tournament', lazy=True, cascade='all, delete-orphan')
+    room_aliases = db.relationship('RoomAlias', back_populates='tournament', lazy=True, cascade='all, delete-orphan')
     
     # Reader assignments with room numbers
     reader_assignments = db.relationship(

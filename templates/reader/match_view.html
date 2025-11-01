@@ -298,10 +298,15 @@
 
     <!-- Game Interface -->
     <div class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h4 class="mb-0">Cycle <span id="currentCycleDisplay">1</span>/20</h4>
-            <div class="progress flex-grow-1 mx-3" style="height: 20px;">
-                <div class="progress-bar" id="progressBar" role="progressbar" style="width: 5%;"></div>
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h4 class="mb-0">Cycle <span id="currentCycleDisplay">1</span> of 20</h4>
+                <div class="text-muted" id="progressPercentage">5% Complete</div>
+            </div>
+            <div class="progress" style="height: 20px;">
+                <div class="progress-bar" id="progressBar" role="progressbar" style="width: 5%;">
+                    <span class="visually-hidden">5% Complete</span>
+                </div>
             </div>
         </div>
         
@@ -309,23 +314,46 @@
             <!-- Tossup Section -->
             <div id="tossupSection">
                 <h5 class="mb-3">Tossup Question</h5>
-                <div id="tossupQuestion" class="mb-4 p-3 bg-light rounded">
+                <div id="tossupQuestion" class="mb-4 p-3 bg-light rounded position-relative">
                     <div class="question-text user-select-none"></div>
                     <div class="text-muted small mt-2">Click on a word where the answer was given to score</div>
+                    <!-- Completed Question Overlay -->
+                    <div id="completedQuestionOverlay" class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="background: rgba(255,255,255,0.8); border-radius: 0.25rem; z-index: 5;">
+                        <div class="text-center p-3">
+                            <div class="mb-2">Tossup already scored</div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.gameState && window.gameState.clearCurrentCycle();">
+                                Clear to edit
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                    <div class="mt-3 d-flex gap-2">
-                        <button type="button" class="btn btn-outline-secondary" id="prevCycleBtn" onclick="window.gameState && window.gameState.prevCycle(); return false;" disabled>
-                            <i class="bi bi-arrow-left-circle"></i> Previous Cycle
-                        </button>
-                        <button type="button" class="btn btn-outline-warning" id="skipToNextCycleBtn" onclick="window.gameState && window.gameState.skipToNextCycle(); return false;">
-                            <i class="bi bi-skip-forward"></i> Skip to Next Cycle (No Points)
-                        </button>
-                        <button type="button" class="btn btn-outline-danger" id="throwOutTossupBtn" onclick="window.gameState && window.gameState.throwOutTossup(); return false;">
-                            <i class="bi bi-trash"></i> Throw Out Tossup (Invalidate)
-                        </button>
+                    <!-- Navigation Bar - Bottom Right -->
+                    <div class="d-flex justify-content-end mt-3">
+                        <div id="navigationBar" class="btn-group" role="group" aria-label="Cycle Navigation">
+                            <button type="button" class="btn btn-outline-secondary" id="prevCycleBtn" 
+                                onclick="window.gameState && window.gameState.prevCycle(); return false;"
+                                title="Previous Cycle">
+                                <i class="bi bi-arrow-left"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-primary" id="nextCycleBtn"
+                                onclick="window.gameState && window.gameState.skipToNextCycle(); return false;"
+                                title="Skip to Next (No Points)">
+                                <i class="bi bi-arrow-right"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-danger" id="throwOutTossupBtn" 
+                                onclick="window.gameState && window.gameState.throwOutTossup(); return false;"
+                                title="Throw Out Tossup">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-warning" id="clearCycleBtn" 
+                                onclick="window.gameState && window.gameState.clearCurrentCycle(); return false;"
+                                title="Clear Current Cycle">
+                                <i class="bi bi-x-circle"></i>
+                            </button>
+                        </div>
                     </div>
                     
-                    <div class="alert alert-info">
+                    <div class="alert alert-info mt-3">
                         <i class="bi bi-info-circle"></i> Click on any word in the question to open the scoring modal and select a player.
                     </div>
                 </div>
@@ -336,9 +364,6 @@
                 <h5 class="mb-3">Bonus Questions</h5>
                 <div id="bonusQuestions" class="mb-4">
                     <!-- Bonus questions will be inserted here -->
-                </div>
-                <div class="d-flex justify-content-end">
-                    <button id="nextCycleBtn" class="btn btn-primary">Next Cycle</button>
                 </div>
             </div>
         </div>
@@ -485,6 +510,38 @@
             </div>
         </div>
     </div>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    /* Navigation Bar Styles */
+    #navigationBar {
+        transition: all 0.3s ease;
+    }
+    #navigationBar .btn {
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border-radius: 50%;
+        margin: 0 2px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    #navigationBar .btn i {
+        font-size: 1.2rem;
+    }
+    #navigationBar .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    #navigationBar .btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+</style>
 {% endblock %}
 
 {% block scripts %}
@@ -924,42 +981,72 @@
         },
         
         // Update active players for the current cycle based on checkboxes
-        // This function now captures the current state of checkboxes and stores them for the current cycle
+        // This function captures the current state of checkboxes and updates the active players
         updateActivePlayers: function() {
             try {
                 const currentCycle = this.getCurrentCycle();
                 
-                // Clear current player lists
-                currentCycle.team1Players = [];
-                currentCycle.team2Players = [];
+                // Track which players are now active
+                const activeTeam1Players = [];
+                const activeTeam2Players = [];
                 
-                // Get all checked checkboxes for team 1
-                document.querySelectorAll('#team1Players .player-checkbox:checked').forEach(checkbox => {
+                // Process team 1 players
+                document.querySelectorAll('#team1Players .player-checkbox').forEach(checkbox => {
                     const playerId = parseInt(checkbox.dataset.playerId, 10);
                     const playerName = checkbox.dataset.name || `Player ${playerId}`;
+                    const isActive = checkbox.checked;
+                    
                     if (playerId) {
-                        currentCycle.team1Players.push({
-                            id: playerId,
-                            name: playerName,
-                            active: true
-                        });
+                        // Update player's active state in the cycle
+                        const existingPlayer = currentCycle.team1Players.find(p => p.id === playerId);
+                        if (existingPlayer) {
+                            existingPlayer.active = isActive;
+                        } else {
+                            currentCycle.team1Players.push({
+                                id: playerId,
+                                name: playerName,
+                                active: isActive
+                            });
+                        }
+                        
+                        if (isActive) {
+                            activeTeam1Players.push(playerId);
+                        }
                     }
                 });
                 
-                // Get all checked checkboxes for team 2
-                document.querySelectorAll('#team2Players .player-checkbox:checked').forEach(checkbox => {
+                // Process team 2 players
+                document.querySelectorAll('#team2Players .player-checkbox').forEach(checkbox => {
                     const playerId = parseInt(checkbox.dataset.playerId, 10);
                     const playerName = checkbox.dataset.name || `Player ${playerId}`;
+                    const isActive = checkbox.checked;
+                    
                     if (playerId) {
-                        currentCycle.team2Players.push({
-                            id: playerId,
-                            name: playerName,
-                            active: true
-                        });
+                        // Update player's active state in the cycle
+                        const existingPlayer = currentCycle.team2Players.find(p => p.id === playerId);
+                        if (existingPlayer) {
+                            existingPlayer.active = isActive;
+                        } else {
+                            currentCycle.team2Players.push({
+                                id: playerId,
+                                name: playerName,
+                                active: isActive
+                            });
+                        }
+                        
+                        if (isActive) {
+                            activeTeam2Players.push(playerId);
+                        }
                     }
                 });
                 
-                // Initialize scores arrays if needed
+                // Update activePlayers for this cycle
+                currentCycle.activePlayers = {
+                    team1: activeTeam1Players,
+                    team2: activeTeam2Players
+                };
+                
+                // Ensure scores arrays are properly sized
                 if (!currentCycle.team1Scores || currentCycle.team1Scores.length !== currentCycle.team1Players.length) {
                     currentCycle.team1Scores = Array(currentCycle.team1Players.length).fill(0);
                 }
@@ -969,10 +1056,10 @@
                 
                 console.log('Updated active players for cycle:', {
                     cycle: this.currentCycle,
-                    team1: currentCycle.team1Players,
-                    team2: currentCycle.team2Players,
-                    scores1: currentCycle.team1Scores,
-                    scores2: currentCycle.team2Scores
+                    activeTeam1: activeTeam1Players,
+                    activeTeam2: activeTeam2Players,
+                    allTeam1Players: currentCycle.team1Players,
+                    allTeam2Players: currentCycle.team2Players
                 });
                 
                 // Save state
@@ -1308,7 +1395,9 @@
             document.body.addEventListener('click', handleButtonClick);
         },
         
-        // Initialize the game
+        // Track which team is eligible for the bonus
+        bonusEligibleTeam: null,
+        
         // Track if we're in the middle of skipping to prevent duplicate operations
         isSkipping: false,
         
@@ -1363,16 +1452,42 @@
         // Initialize a single cycle with default values
         initializeCycle: function(cycleIndex) {
             if (!this.scorecard.cycles[cycleIndex]) {
-                // Get current player IDs from server data
-                const team1Players = this.serverData.playersTeam1 ? 
-                    this.serverData.playersTeam1.map(p => p.id) : [];
-                const team2Players = this.serverData.playersTeam2 ? 
-                    this.serverData.playersTeam2.map(p => p.id) : [];
+                // Get active players from previous cycle if available, otherwise from server data
+                let team1Players = [];
+                let team2Players = [];
+                
+                if (cycleIndex > 0 && this.scorecard.cycles[cycleIndex - 1]) {
+                    // Copy players from previous cycle to maintain active state
+                    const prevCycle = this.scorecard.cycles[cycleIndex - 1];
+                    team1Players = [...(prevCycle.team1Players || [])];
+                    team2Players = [...(prevCycle.team2Players || [])];
+                } else {
+                    // Initialize from server data for first cycle
+                    team1Players = this.serverData.playersTeam1 ? 
+                        this.serverData.playersTeam1.map(p => ({
+                            id: p.id,
+                            name: p.name || `Player ${p.id}`,
+                            active: true  // All players active by default
+                        })) : [];
+                        
+                    team2Players = this.serverData.playersTeam2 ? 
+                        this.serverData.playersTeam2.map(p => ({
+                            id: p.id,
+                            name: p.name || `Player ${p.id}`,
+                            active: true  // All players active by default
+                        })) : [];
+                }
                 
                 this.scorecard.cycles[cycleIndex] = {
-                    // Active players for this cycle
-                    team1Players: [...team1Players],
-                    team2Players: [...team2Players],
+                    // Active players for this cycle with their details
+                    team1Players: JSON.parse(JSON.stringify(team1Players)),
+                    team2Players: JSON.parse(JSON.stringify(team2Players)),
+                    
+                    // Track which players were active in this cycle
+                    activePlayers: {
+                        team1: team1Players.filter(p => p.active).map(p => p.id),
+                        team2: team2Players.filter(p => p.active).map(p => p.id)
+                    },
                     
                     // Player scores (corresponding by index to player arrays)
                     team1Scores: Array(team1Players.length).fill(0),
@@ -1384,8 +1499,17 @@
                     
                     // Current tossup/bonus state (temporary)
                     currentTossup: null,
-                    currentBonus: null
+                    currentBonus: null,
+                    
+                    // Track cycle completion state
+                    isComplete: false,
+                    isThrownOut: false
                 };
+                
+                console.log(`Initialized cycle ${cycleIndex} with active players:`, {
+                    team1: this.scorecard.cycles[cycleIndex].activePlayers.team1,
+                    team2: this.scorecard.cycles[cycleIndex].activePlayers.team2
+                });
             }
             return this.scorecard.cycles[cycleIndex];
         },
@@ -1407,12 +1531,23 @@
         // Handle answer (correct/incorrect)
         handleAnswer: function(isCorrect) {
             try {
-                if (!this.currentAnswerer || !this.currentAnswerer.team || this.currentAnswerer.playerIndex === undefined) {
-                    console.error('[ERROR] Invalid current answerer in handleAnswer:', this.currentAnswerer);
+                // Get the current answerer and team
+                const currentAnswerer = this.currentAnswerer;
+                if (!currentAnswerer) {
+                    console.error('Invalid current answerer in handleAnswer:', currentAnswerer);
                     return;
                 }
 
-                const { team, playerIndex, playerName } = this.currentAnswerer;
+                const { team, playerIndex, playerName } = currentAnswerer;
+                
+                // Validate we have the required info
+                if (team === undefined || playerIndex === undefined || !playerName) {
+                    console.error('Missing required answerer information:', { team, playerIndex, playerName });
+                    return;
+                }
+                
+                // Make sure we have the latest scores before proceeding
+                this.updateScores();
                 const currentQuestion = this.questions[this.currentCycle];
                 
                 console.log(`[DEBUG] Handling answer for team ${team}, player ${playerName}, isCorrect: ${isCorrect}`);
@@ -1446,11 +1581,36 @@
                     return;
                 }
                 
+                // Initialize firstIncorrectTeam if it doesn't exist
+                if (currentCycle.tossup.firstIncorrectTeam === undefined) {
+                    currentCycle.tossup.firstIncorrectTeam = null;
+                }
+                
+                // Ensure tossup object exists
+                currentCycle.tossup = currentCycle.tossup || {
+                    points: null,
+                    team: null,
+                    player: null,
+                    playerIndex: null,
+                    team1Answered: false,
+                    team2Answered: false
+                };
+
                 // Mark this team as having answered
                 if (team === 1) {
                     currentCycle.tossup.team1Answered = true;
+                    this.hasTeam1Answered = true;
+                    console.log(`[DEBUG] Marked team 1 as having answered`);
                 } else {
                     currentCycle.tossup.team2Answered = true;
+                    this.hasTeam2Answered = true;
+                    console.log(`[DEBUG] Marked team 2 as having answered`);
+                }
+                
+                // If answer is correct, this team is eligible for the bonus
+                if (isCorrect) {
+                    this.bonusEligibleTeam = team;
+                    console.log(`[DEBUG] Team ${team} is eligible for bonus`);
                 }
 
                 console.log(`Handling answer for ${playerName} (Team ${team}), Correct: ${isCorrect}`);
@@ -1459,7 +1619,7 @@
                 let isPower = false;
 
                 if (isCorrect) {
-                    // Correct answer logic (15 if before '(*)' in the question, 10 otherwise)
+                    // Correct answer logic (10 points, or 15 if before power mark *)
                     const questionText = currentQuestion.question_text;
                     
                     // Create a temporary element to get the plain text content without HTML tags
@@ -1467,8 +1627,8 @@
                     tempDiv.innerHTML = questionText;
                     const plainText = tempDiv.textContent || tempDiv.innerText || '';
                     
-                    // Find the power mark in the plain text
-                    const powerMarkIndex = plainText.indexOf('(*)')
+                    // Check if there's a power mark (*) in the question
+                    const powerMarkIndex = plainText.indexOf('*');
                     
                     // Get all words up to the power mark to count how many words precede it
                     let wordsBeforePower = [];
@@ -1484,7 +1644,7 @@
                         console.log('Words before power count:', wordsBeforePower.length);
                     }
                     
-                    // If power mark exists and current word is before it, it's a power
+                    // If power mark exists and current word is before it, it's a power (15 points)
                     isPower = powerMarkIndex !== -1 && this.currentWordIndex < wordsBeforePower.length;
                     points = isPower ? 15 : 10;
                     
@@ -1505,49 +1665,55 @@
                     this.endTossup(); // End the tossup, no more answers allowed
 
                 } else {
-                    // Incorrect answer logic (-5 for neg if not at last word, 0 otherwise)
-                    const questionWords = currentQuestion.question_text.split(' ');
-                    const isLastWord = this.currentWordIndex >= questionWords.length - 1;
+                    // Incorrect answer logic
                     const otherTeam = team === 1 ? 2 : 1;
-                    
-                    // Always give -5 for incorrect answers not at the last word, regardless of team answer status
-                    if (!isLastWord) {
-                        points = -5; // It's a neg (not at last word)
-                    } else {
-                        points = 0; // It's a zero (at last word)
-                    }
-
-                    this.updateScore(team, playerIndex, points, isCorrect, isPower);
-                    this.updateAnswerUI(isCorrect, points, playerName, team);
-
-                    // Check if the other team can still answer
                     const otherTeamHasAnswered = otherTeam === 1 ? 
                         currentCycle.tossup.team1Answered : 
                         currentCycle.tossup.team2Answered;
                     
+                    // Track if this is the first incorrect answer in this cycle
+                    const isFirstIncorrect = currentCycle.tossup.firstIncorrectTeam === null;
+                
+                    // Get the clicked word from the event target
+                    const clickedWord = this.clickedWordElement ? this.clickedWordElement.textContent.trim() : '';
+                    const isEndMarker = clickedWord === '///';
+                    
+                    console.log('Clicked word:', clickedWord, 'Is end marker:', isEndMarker);
+            
+                    // No penalty for clicking on the end marker, always 0 points
+                    // For other cases, first incorrect gets -5, subsequent get 0
+                    points = (isFirstIncorrect && !isEndMarker) ? -5 : 0;
+                
+                    // Update the score and UI before checking for first incorrect
+                    this.updateScore(team, playerIndex, points, isCorrect, isPower);
+                    this.updateAnswerUI(isCorrect, points, playerName, team);
+                    
                     try {
-                        if (!otherTeamHasAnswered) {
-                            // Show message that the other team can answer
-                            const otherTeamName = otherTeam === 1 ? 
-                                this.serverData.game.team1 : 
-                                this.serverData.game.team2;
-                            this.showMessage(`Incorrect. ${otherTeamName} may now answer.`);
+                        const otherTeamName = otherTeam === 1 ? 
+                            this.serverData.game.team1 : 
+                            this.serverData.game.team2;
                             
-                            // Close the modal to let the other team answer
+                        console.log(`[DEBUG] Processing incorrect answer: firstIncorrectTeam=${currentCycle.tossup.firstIncorrectTeam}, currentTeam=${team}`);
+                        
+                        // If this is the first incorrect answer, record which team it was
+                        if (isFirstIncorrect) {
+                            console.log(`[DEBUG] First incorrect answer in cycle ${this.currentCycle} from team ${team}`);
+                            currentCycle.tossup.firstIncorrectTeam = team;
+                            console.log(`[DEBUG] Updated firstIncorrectTeam to ${currentCycle.tossup.firstIncorrectTeam}`);
+                            
+                            // First incorrect answer, other team can still answer
                             this.closeScoringModal();
-                            
-                            // Don't end the tossup - let the other team answer
-                            // Reset the current answerer to allow the other team to buzz in
-                            this.currentAnswerer = null;
-                            
-                            // Re-enable word clicking for the other team by resetting the current answerer
-                            // The word clicking is handled by the word click event listeners
-                            // which check if currentAnswerer is null before allowing a buzz
                         } else {
-                            // Both teams have answered incorrectly, end the tossup
-                            this.showMessage('Both teams have answered incorrectly. Moving to next question.');
-                            this.endTossup();
-                            this.closeScoringModal();
+                            // This is a subsequent incorrect answer from the same team
+                            // If the other team hasn't answered yet, let them answer
+                            if (!otherTeamHasAnswered) {
+                                // Do nothing, let them answer
+                            } else {
+                                // Both teams have answered incorrectly
+                                this.endTossup();
+                                this.closeScoringModal();
+                                this.nextCycle();
+                            }
                         }
                     } catch (error) {
                         console.error('Error handling incorrect answer:', error);
@@ -1571,6 +1737,12 @@
         
         // Update score for a team/player
         updateScore: function(teamNum, playerIndex, points, isCorrect, isPower) {
+            // Make sure we have the latest cycle data
+            const currentCycle = this.getCurrentCycle();
+            if (!currentCycle) {
+                console.error('No current cycle found in updateScore');
+                return;
+            }
             console.group('updateScore - Start');
             console.log(`Team: ${teamNum}, Player: ${playerIndex}, Points: ${points}, Correct: ${isCorrect}, Power: ${isPower}`);
             
@@ -1832,12 +2004,106 @@
             });
         },
         
+        // Clear current cycle's scoring
+        clearCurrentCycle: function() {
+            if (!confirm('Are you sure you want to clear all scoring for this cycle? This cannot be undone.')) {
+                return;
+            }
+            
+            const cycle = this.getCurrentCycle();
+            cycle.tossup = cycle.tossup || {};
+            
+            // Update tossup data
+            cycle.tossup.points = null;
+            cycle.tossup.team = null;
+            cycle.tossup.player = null;
+            cycle.tossup.playerIndex = null;
+            
+            // Update answered states
+            cycle.tossup.team1Answered = false;
+            cycle.tossup.team2Answered = false;
+            this.hasTeam1Answered = false;
+            this.hasTeam2Answered = false;
+            
+            // Reset bonus data
+            cycle.bonus = { team1: 0, team2: 0, parts: [null, null, null] };
+            
+            // Reset scores
+            cycle.team1Scores = [];
+            cycle.team2Scores = [];
+            
+            // Hide bonus section
+            const bonusSection = document.getElementById('bonusSection');
+            if (bonusSection) bonusSection.style.display = 'none';
+            
+            // Update UI
+            this.updateUI();
+            this.updateScores();
+            this.saveProgress();
+            
+            // Show feedback
+            alert('Cycle scoring has been reset. You can now re-enter the scores.');
+        },
+        
         // Update UI
         updateUI: function() {
-            const currentCycle = this.scorecard.cycles[this.currentCycle];
+            const currentCycle = this.getCurrentCycle();
             
-            // Update current cycle display
-            document.getElementById('currentCycleDisplay').textContent = this.currentCycle + 1;
+            // Update current cycle display with clear button
+            const cycleDisplay = document.getElementById('currentCycleDisplay');
+            if (cycleDisplay) {
+                // Only show clear button if there's something to clear
+                const hasScoring = (currentCycle.tossup && 
+                                 (currentCycle.tossup.points !== null || 
+                                  currentCycle.tossup.team1Answered || 
+                                  currentCycle.tossup.team2Answered)) ||
+                               (currentCycle.bonus && 
+                                (currentCycle.bonus.team1 > 0 || 
+                                 currentCycle.bonus.team2 > 0));
+                
+                cycleDisplay.innerHTML = `
+                    <span>${this.currentCycle + 1}</span>
+                    ${hasScoring ? `
+                    <button class="btn btn-sm btn-outline-danger ms-2" 
+                            onclick="event.stopPropagation(); gameState.clearCurrentCycle()"
+                            title="Clear all scoring for this cycle">
+                        <i class="bi bi-x-circle"></i> Clear
+                    </button>` : ''}
+                `;
+            }
+            
+            // Update tossup buttons state
+            if (currentCycle.tossup) {
+                // Mark which team (if any) has answered
+                if (currentCycle.tossup.team1Answered) {
+                    document.querySelectorAll('.team1-answer-btn').forEach(btn => {
+                        btn.classList.add('active');
+                    });
+                }
+                if (currentCycle.tossup.team2Answered) {
+                    document.querySelectorAll('.team2-answer-btn').forEach(btn => {
+                        btn.classList.add('active');
+                    });
+                }
+                
+                // Mark correct/incorrect answers
+                if (currentCycle.tossup.points !== null) {
+                    const points = currentCycle.tossup.points;
+                    const team = currentCycle.tossup.team;
+                    const isPower = points === 15;
+                    
+                    // Highlight the selected points button
+                    const pointsBtn = document.querySelector(`.tossup-points[data-points="${points}"][data-team="${team}"]`);
+                    if (pointsBtn) {
+                        pointsBtn.classList.add('active');
+                        
+                        // Add visual indicator for power
+                        if (isPower) {
+                            pointsBtn.innerHTML += ' <span class="badge bg-warning text-dark">POWER</span>';
+                        }
+                    }
+                }
+            }
             
             // Update tossup buttons
             document.querySelectorAll('.tossup-points').forEach(btn => {
@@ -2112,16 +2378,16 @@
                 // Bonus display - show each part's score if available
                 if (bonus.team === 1) {
                     if (bonus.parts && bonus.parts.every(p => p !== null)) {
-                        // Show each part's score (✓ or ✗)
-                        const partsDisplay = bonus.parts.map(p => p ? '✓' : '✗').join(' / ');
+                        // Show each part's score ( or )
+                        const partsDisplay = bonus.parts.map(p => p ? ' ' : ' ').join(' / ');
                         bonus1Display = `${partsDisplay} (${bonus.points})`;
                     } else if (bonus.points !== undefined) {
                         bonus1Display = bonus.points > 0 ? `+${bonus.points}` : '0';
                     }
                 } else if (bonus.team === 2) {
                     if (bonus.parts && bonus.parts.every(p => p !== null)) {
-                        // Show each part's score (✓ or ✗)
-                        const partsDisplay = bonus.parts.map(p => p ? '✓' : '✗').join(' / ');
+                        // Show each part's score ( or )
+                        const partsDisplay = bonus.parts.map(p => p ? ' ' : ' ').join(' / ');
                         bonus2Display = `${partsDisplay} (${bonus.points})`;
                     } else if (bonus.points !== undefined) {
                         bonus2Display = bonus.points > 0 ? `+${bonus.points}` : '0';
@@ -2171,11 +2437,16 @@
         
         // Update progress
         updateProgress: function() {
-            const progress = (this.validCycles / 20) * 100;
+            const progress = Math.round((this.currentCycle / 20) * 100);
             const progressBar = document.getElementById('progressBar');
-            if (progressBar) {
-                progressBar.style.width = `${Math.min(100, progress)}%`;
-                progressBar.setAttribute('aria-valuenow', Math.min(100, progress));
+            const progressPercentage = document.getElementById('progressPercentage');
+            
+            if (progressBar && progressPercentage) {
+                const width = Math.min(100, Math.max(5, progress)); // Keep at least 5% width for visibility
+                progressBar.style.width = `${width}%`;
+                progressBar.setAttribute('aria-valuenow', width);
+                progressBar.querySelector('.visually-hidden').textContent = `${width}% Complete`;
+                progressPercentage.textContent = `${width}% Complete`;
             }
         },
         
@@ -2284,21 +2555,7 @@
             
             console.log('Sending scorecard data:', JSON.parse(JSON.stringify(scorecardData)));
             
-            // Show confirmation only if not auto-submitting after last cycle
-            const isAutoSubmit = this.currentCycle >= this.totalCycles - 1;
-            
-            if (!isAutoSubmit && !confirm('Are you sure you want to submit the game? This cannot be undone.')) {
-                // Re-enable buttons if user cancels
-                if (submitBtn) {
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = 'Submit Game';
-                }
-                if (nextCycleBtn) {
-                    nextCycleBtn.disabled = false;
-                    nextCycleBtn.textContent = 'Next Cycle';
-                }
-                return;
-            }
+            // No confirmation needed, proceed with submission
             
             // Get CSRF token from meta tag
             const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
@@ -2376,15 +2633,9 @@
             this.saveProgress();
         },
         
-        // Update the progress bar based on valid cycles
+        // Update the progress bar based on current cycle
         updateProgressBar: function() {
-            const progress = (this.validCycles / 20) * 100;
-            const progressBar = document.getElementById('progressBar');
-            if (progressBar) {
-                progressBar.style.width = `${Math.min(100, progress)}%`;
-                progressBar.setAttribute('aria-valuenow', progress);
-                progressBar.textContent = `${Math.round(progress)}%`;
-            }
+            this.updateProgress(); // Reuse the updateProgress function
         },
         
         // Skip to next cycle while properly recording active players
@@ -2396,37 +2647,33 @@
             console.log('[SKIP] Skip button clicked');
             
             // Confirm with user
-            if (!confirm('Skip to next question? This will count as a valid cycle with zero points for active players.')) {
+            if (!confirm('Skip to next question? This will preserve all tossup scores and advance to the next question.')) {
                 this.isSkipping = false;
                 return;
             }
             
             try {
-                // Update active players for the current cycle
-                this.updateActivePlayers();
-                
-                // Get the current cycle data
+                // Save the current cycle's state
                 const currentCycle = this.getCurrentCycle();
                 
                 // Ensure we have valid player arrays
                 if (!currentCycle.team1Players) currentCycle.team1Players = [];
                 if (!currentCycle.team2Players) currentCycle.team2Players = [];
                 
-                // Initialize scores arrays if needed and set all scores to zero
-                if (!currentCycle.team1Scores || currentCycle.team1Scores.length !== currentCycle.team1Players.length) {
+                // Initialize scores arrays if they don't exist
+                if (!currentCycle.team1Scores) {
                     currentCycle.team1Scores = Array(currentCycle.team1Players.length).fill(0);
-                } else {
-                    currentCycle.team1Scores = currentCycle.team1Scores.map(() => 0);
                 }
-                
-                if (!currentCycle.team2Scores || currentCycle.team2Scores.length !== currentCycle.team2Players.length) {
+                if (!currentCycle.team2Scores) {
                     currentCycle.team2Scores = Array(currentCycle.team2Players.length).fill(0);
-                } else {
-                    currentCycle.team2Scores = currentCycle.team2Scores.map(() => 0);
                 }
                 
                 // Mark the cycle as valid
                 currentCycle.valid = true;
+                
+                // Save the current team totals before moving on
+                currentCycle.team1Total = this.calculateTeamTotal(1);
+                currentCycle.team2Total = this.calculateTeamTotal(2);
                 
                 console.log('[SKIP] Recorded zero scores for active players in cycle:', {
                     cycle: this.currentCycle,
@@ -2481,6 +2728,26 @@
                 this.isSkipping = false;
             }, 100);
         },
+
+        // Handle player buzz
+        handlePlayerBuzz: function(team, playerIndex, playerName) {
+            console.log(`[DEBUG] Player ${playerName} (Team ${team}) buzzed in`);
+            
+            // Set the current answerer with all required fields
+            this.currentAnswerer = { 
+                team: parseInt(team, 10), 
+                playerIndex: parseInt(playerIndex, 10), 
+                playerName: String(playerName)
+            };
+            
+            console.log('[DEBUG] Set currentAnswerer:', this.currentAnswerer);
+            
+            // Show the scoring modal
+            this.showScoringModal();
+            
+            this.updateNavigationButtons();
+            return true;
+        },
         
         // Navigate to a specific cycle
         goToCycle: function(cycleIndex) {
@@ -2489,36 +2756,54 @@
                 return false;
             }
             
-            // Save current cycle state before leaving
-            this.saveProgress(true); // Silent save
-            
-            // Update current cycle
             this.currentCycle = cycleIndex;
-            
-            // Load the question for this cycle
             this.loadQuestion(this.currentCycle);
-            
-            // Update UI
-            this.updateUI();
-            
-            // Update navigation buttons
             this.updateNavigationButtons();
-            
             return true;
         },
         
         // Update navigation buttons state
         updateNavigationButtons: function() {
             const prevBtn = document.getElementById('prevCycleBtn');
-            const nextBtn = document.getElementById('skipToNextCycleBtn');
+            const nextBtn = document.getElementById('nextCycleBtn');
+            const skipBtn = document.getElementById('skipToNextCycleBtn');
+            const throwOutBtn = document.getElementById('throwOutTossupBtn');
+            const cycleNumberDisplay = document.getElementById('cycleNumberDisplay');
             
-            if (prevBtn) {
-                prevBtn.disabled = this.currentCycle <= 0;
+            // Update cycle number display
+            if (cycleNumberDisplay) {
+                cycleNumberDisplay.textContent = this.currentCycle + 1;
             }
             
-            // Never disable the next cycle button - let the game handle end conditions
+            // Update previous button state
+            if (prevBtn) {
+                prevBtn.disabled = this.currentCycle <= 0;
+                prevBtn.title = prevBtn.disabled ? 'First cycle' : 'Previous cycle';
+            }
+            
+            // Update next button state
             if (nextBtn) {
-                nextBtn.disabled = false;
+                const isLastCycle = this.currentCycle >= this.questions.length - 1;
+                nextBtn.disabled = isLastCycle;
+                nextBtn.title = isLastCycle ? 'End of game' : 'Next cycle';
+                nextBtn.classList.toggle('btn-outline-primary', !isLastCycle);
+                nextBtn.classList.toggle('btn-outline-secondary', isLastCycle);
+            }
+            
+            // Update skip button state
+            if (skipBtn) {
+                skipBtn.title = 'Skip to next cycle (no points)';
+                skipBtn.disabled = this.currentCycle >= this.questions.length - 1;
+            }
+            
+            // Update throw out button state
+            if (throwOutBtn) {
+                const currentCycle = this.getCurrentCycle();
+                const hasScoring = currentCycle.tossup?.points !== null || 
+                                 currentCycle.tossup?.team1Answered || 
+                                 currentCycle.tossup?.team2Answered;
+                throwOutBtn.disabled = !hasScoring;
+                throwOutBtn.title = hasScoring ? 'Throw out this tossup' : 'No scoring to throw out';
             }
         },
         
@@ -2540,13 +2825,16 @@
             message += `${this.serverData.game.team1}: ${team1Score}\n`;
             message += `${this.serverData.game.team2}: ${team2Score}\n\n`;
             
+            // Check if we're out of tossups (assuming 20 tossups + any tiebreakers)
+            const isOutOfTossups = this.currentCycle >= this.totalCycles - 1;
+            
             if (team1Score > team2Score) {
                 message += `${this.serverData.game.team1} wins!`;
             } else if (team2Score > team1Score) {
                 message += `${this.serverData.game.team2} wins!`;
-            } else {
-                // In case of a tie after tiebreakers, allow continuation
-                message += "It's a tie! The game will continue until one team scores.";
+            } else if (!isOutOfTossups) {
+                // Only continue if we have more tossups available
+                message += "It's a tie! The game will continue with the next tossup.";
                 
                 // Enable continue button for tiebreakers
                 const nextCycleBtn = document.getElementById('nextCycleBtn');
@@ -2558,28 +2846,21 @@
                 // Show the message but don't disable controls
                 alert(message);
                 return;
+            } else {
+                // If we're out of tossups and it's still a tie, just show the tie message
+                message += "The game has ended in a tie!";
             }
             
-            // Only disable controls if the game is truly over (not a tie)
-            if (team1Score !== team2Score) {
-                const buttons = document.querySelectorAll('button');
-                buttons.forEach(btn => {
-                    if (btn.id !== 'submitGameBtn' && btn.id !== 'nextCycleBtn') {
-                        btn.disabled = true;
-                    }
-                });
-                
-                // Show final score and ask to submit
-                if (confirm(message + '\n\nSubmit the game results?')) {
-                    this.submitGame();
-                } else {
-                    // Re-enable the submit button in case user wants to submit later
-                    const submitBtn = document.getElementById('submitGameBtn');
-                    if (submitBtn) {
-                        submitBtn.disabled = false;
-                    }
+            // Disable controls for all buttons except submit/next cycle
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(btn => {
+                if (btn.id !== 'submitGameBtn' && btn.id !== 'nextCycleBtn') {
+                    btn.disabled = true;
                 }
-            }
+            });
+            
+            // Always submit the game when it ends, whether there's a winner or it's a tie
+            this.submitGame();
         },
         
         // Flag to track if we're in the middle of processing a cycle change
@@ -2587,6 +2868,8 @@
         
         // Move to the next cycle
         nextCycle: function(isCycleValid = true) {
+            // Clear the bonus eligible team when moving to next cycle
+            this.bonusEligibleTeam = null;
             // Prevent multiple rapid clicks
             if (this.isProcessingCycle) {
                 console.log('[CYCLE] Already processing cycle change');
@@ -2600,6 +2883,20 @@
                 
                 // First, capture the current active players for the cycle
                 this.updateActivePlayers();
+                
+                // Save the current cycle's scores before resetting
+                const currentCycle = this.getCurrentCycle();
+                if (currentCycle) {
+                    // Make sure we have the latest scores
+                    this.updateScores();
+                    
+                    // Store the scores in the cycle data
+                    currentCycle.team1Score = this.calculateTeamTotal(1);
+                    currentCycle.team2Score = this.calculateTeamTotal(2);
+                    
+                    // Log the scores for debugging
+                    console.log(`[Cycle ${this.currentCycle + 1}] Saving scores - Team 1: ${currentCycle.team1Score}, Team 2: ${currentCycle.team2Score}`);
+                }
                 
                 // Reset answer tracking state
                 this.currentAnswerer = null;
@@ -2821,6 +3118,70 @@
         // Load the current question based on the current cycle
         loadCurrentQuestion: function() {
             this.loadQuestion(this.currentCycle);
+            
+            // End marker is now added in loadQuestion to ensure it's always processed with the text
+        },
+        
+        // Show or hide the completed question overlay
+        updateCompletedQuestionOverlay: function(cycle) {
+            const overlay = document.getElementById('completedQuestionOverlay');
+            if (!overlay) return;
+            
+            // Show overlay if there's any tossup scoring
+            if (cycle?.tossup?.points !== null && cycle?.tossup?.points !== undefined) {
+                overlay.classList.remove('d-none');
+            } else {
+                overlay.classList.add('d-none');
+            }
+        },
+        
+        // Clear the current cycle's scoring
+        clearCurrentCycle: function() {
+            const cycleIndex = this.currentCycle;
+            const cycle = this.getCurrentCycle();
+            if (!cycle) return;
+            
+            console.log(`[CLEAR] Clearing cycle ${cycleIndex}`);
+            
+            // Reset tossup and bonus data
+            if (cycle.tossup) {
+                cycle.tossup.points = null;
+                cycle.tossup.team1Answered = false;
+                cycle.tossup.team2Answered = false;
+                cycle.tossup.playerId = null;
+                cycle.tossup.playerName = null;
+            }
+            
+            if (cycle.bonus) {
+                cycle.bonus.points = null;
+                cycle.bonus.team1Answered = false;
+                cycle.bonus.team2Answered = false;
+            }
+            
+            // Mark the cycle as invalid in the scorecard
+            this.scorecard.cycles[cycleIndex] = {
+                ...this.scorecard.cycles[cycleIndex],
+                valid: false
+            };
+            
+            // Hide the overlay
+            const overlay = document.getElementById('completedQuestionOverlay');
+            if (overlay) {
+                overlay.classList.add('d-none');
+            }
+            
+            console.log(`[CLEAR] Cycle ${cycleIndex} cleared and marked as invalid`);
+            
+            // Force update all UI elements
+            this.updateScores();
+            this.updateProgress();
+            this.updateUI();
+            this.updateScorecardPreview();
+            
+            // Save the updated state
+            this.saveProgress();
+            
+            console.log('[CLEAR] UI and scores updated');
         },
         
         // Load a specific question
@@ -2833,12 +3194,18 @@
                 return;
             }
             
-            // Hide bonus section
+            // Hide bonus section initially, will be shown if needed
             const bonusSection = document.getElementById('bonusSection');
             if (bonusSection) bonusSection.style.display = 'none';
             
-            // Initialize cycle if it doesn't exist
-            if (!this.scorecard.cycles[index]) {
+            // Get or initialize cycle data
+            let cycle = this.scorecard.cycles[index];
+            const isNewCycle = !cycle;
+            
+            // Update the completed question overlay
+            this.updateCompletedQuestionOverlay(cycle);
+            
+            if (isNewCycle) {
                 console.log(`[LOAD] Initializing new cycle ${index}`);
                 this.scorecard.cycles[index] = {
                     tossup: { 
@@ -2852,6 +3219,25 @@
                     bonus: { team1: 0, team2: 0, parts: [null, null, null] },
                     scores: [[], [], [], []]
                 };
+                cycle = this.scorecard.cycles[index];
+            } else {
+                console.log(`[LOAD] Restoring existing cycle ${index}`, JSON.parse(JSON.stringify(cycle)));
+                
+                // Restore bonus state if it exists
+                if (cycle.bonus) {
+                    // Show bonus section if either team has bonus points
+                    if ((cycle.bonus.team1 && cycle.bonus.team1 > 0) || 
+                        (cycle.bonus.team2 && cycle.bonus.team2 > 0) ||
+                        (cycle.bonus.parts && cycle.bonus.parts.some(part => part !== null))) {
+                        if (bonusSection) bonusSection.style.display = 'block';
+                    }
+                }
+                
+                // Restore team answer states
+                if (cycle.tossup) {
+                    this.hasTeam1Answered = cycle.tossup.team1Answered || false;
+                    this.hasTeam2Answered = cycle.tossup.team2Answered || false;
+                }
             }
             
             // Update current cycle index
@@ -2860,8 +3246,25 @@
             
             // Reset answer tracking
             this.currentAnswerer = null;
-            this.hasTeam1Answered = false;
-            this.hasTeam2Answered = false;
+            
+            // Only reset answer states for new cycles or if not already set
+            if (!cycle.tossup) {
+                this.hasTeam1Answered = false;
+                this.hasTeam2Answered = false;
+            } else {
+                // Restore answer states from saved cycle
+                this.hasTeam1Answered = cycle.tossup.team1Answered || false;
+                this.hasTeam2Answered = cycle.tossup.team2Answered || false;
+                
+                // Restore current answerer if any
+                if (cycle.tossup.player) {
+                    this.currentAnswerer = {
+                        team: cycle.tossup.team,
+                        player: cycle.tossup.player,
+                        playerIndex: cycle.tossup.playerIndex
+                    };
+                }
+            }
             
             // Get the current question
             const question = this.questions[index];
@@ -2880,7 +3283,15 @@
                     questionText.innerHTML = '';
                     
                     // Process question text to handle HTML tags and make words clickable
-                    const text = question.question_text || 'No question text available';
+                    let text = question.question_text || 'No question text available';
+                    
+                    // Ensure the end marker is present
+                    if (!text.includes('///')) {
+                        text += ' ///';
+                        // Update the question text in the data model
+                        question.question_text = text;
+                    }
+                    
                     console.log('Processing question text:', text);
                     
                     // First, split by HTML tags to preserve them
@@ -3094,8 +3505,9 @@
                             <p class="text-muted">ANSWER: ${answerText}</p>
                             <div class="btn-group" role="group">
                                 <button type="button" class="btn btn-outline-success bonus-btn" data-part="${partNum}" data-points="10">Correct</button>
-                                <button type="button" class="btn btn-outline-danger bonus-btn" data-part="${partNum}" data-points="0">Incorrect</button>
+                                <button type="button" class="btn btn-outline-danger bonus-btn active" data-part="${partNum}" data-points="0">Incorrect</button>
                             </div>
+                            <span class="ms-2 bonus-score">(0 pts)</span>
                         </div>
                     `;
                 }
@@ -3117,7 +3529,34 @@
             
             // Show bonus section
             const bonusSection = document.getElementById('bonusSection');
-            if (bonusSection) bonusSection.style.display = 'block';
+            if (bonusSection) {
+                bonusSection.style.display = 'block';
+                
+                // Initialize all bonus parts as incorrect (0 points) in the scorecard
+                if (this.scorecard.cycles[this.currentCycle]) {
+                    // Ensure bonus structure exists
+                    if (!this.scorecard.cycles[this.currentCycle].bonus) {
+                        this.scorecard.cycles[this.currentCycle].bonus = { 
+                            team1: 0, 
+                            team2: 0, 
+                            parts: [0, 0, 0] // Initialize all parts as incorrect (0 points)
+                        };
+                    } else if (!Array.isArray(this.scorecard.cycles[this.currentCycle].bonus.parts)) {
+                        this.scorecard.cycles[this.currentCycle].bonus.parts = [0, 0, 0];
+                    }
+                    
+                    // Mark all parts as completed with 0 points
+                    this.scorecard.cycles[this.currentCycle].bonus.parts = this.scorecard.cycles[this.currentCycle].bonus.parts.map(() => 0);
+                    
+                    // Update the total bonus points
+                    const teamNum = this.bonusEligibleTeam || 1;
+                    this.scorecard.cycles[this.currentCycle].bonus[`team${teamNum}`] = 0;
+                    
+                    // Update the UI
+                    this.updateScores();
+                    this.updateScorecardPreview();
+                }
+            }
         },
         
         // Helper function to format score with color
@@ -3455,60 +3894,58 @@
             return total;
         },
         
-        // Calculate team's total bonus points
-        calculateTeamBonusTotal: function(teamNum) {
-            return this.scorecard.cycles.reduce((total, cycle) => {
-                const bonus = cycle[`team${teamNum}Bonus`];
-                return bonus !== null && bonus !== undefined ? total + bonus : total;
-            }, 0);
-        },
-        
-        // Helper function to safely get player name from either string or object
-        getPlayerName: function(player) {
-            if (!player) return 'Unknown Player';
-            return typeof player === 'object' ? (player.name || 'Unknown Player') : String(player);
-        },
-        
-        // Helper function to clean up cycle data by removing empty/undefined fields and restructuring scores
+        // Clean cycle data by removing empty/undefined fields and restructuring scores
         cleanCycleData: function(cycle) {
             console.group('cleanCycleData - Input cycle:');
-            console.log(JSON.parse(JSON.stringify(cycle))); // Deep clone for logging
+            console.log(JSON.parse(JSON.stringify(cycle)));
             console.groupEnd();
             
             const clean = {
                 team1: {},
                 team2: {},
+                activePlayers: {
+                    team1: [],
+                    team2: []
+                },
                 team1Bonus: 0,
                 team2Bonus: 0,
                 buzzes: {}
             };
             
-            // Process team1 scores - include all active players even if they have 0 points
-            if (cycle.team1Players) {
+            // Process team1 players and scores
+            if (cycle.team1Players && Array.isArray(cycle.team1Players)) {
                 cycle.team1Players.forEach((player, index) => {
-                    if (player) {
-                        const playerId = player.id || `player1_${index}`;
-                        // Check both team1Scores and scores[0] for backward compatibility
-                        const points = (cycle.team1Scores && cycle.team1Scores[index]) || 
-                                     (cycle.scores && cycle.scores[0] && cycle.scores[0][index]) || 0;
-                        clean.team1[playerId] = points;
+                    if (player && player.id) {
+                        const playerId = player.id;
+                        const points = (cycle.team1Scores && cycle.team1Scores[index]) || 0;
                         
-                        console.log(`Team 1 Player ${playerId}: ${points} points`);
+                        // Only include players who were active this cycle
+                        if (player.active !== false) {  // Default to true if not specified
+                            clean.team1[playerId] = points;
+                            clean.activePlayers.team1.push(playerId);
+                            console.log(`Team 1 Active Player ${playerId}: ${points} points`);
+                        } else {
+                            console.log(`Team 1 Inactive Player ${playerId}: Skipping`);
+                        }
                     }
                 });
             }
             
-            // Process team2 scores - include all active players even if they have 0 points
-            if (cycle.team2Players) {
+            // Process team2 players and scores
+            if (cycle.team2Players && Array.isArray(cycle.team2Players)) {
                 cycle.team2Players.forEach((player, index) => {
-                    if (player) {
-                        const playerId = player.id || `player2_${index}`;
-                        // Check both team2Scores and scores[2] for backward compatibility
-                        const points = (cycle.team2Scores && cycle.team2Scores[index]) || 
-                                     (cycle.scores && cycle.scores[2] && cycle.scores[2][index]) || 0;
-                        clean.team2[playerId] = points;
+                    if (player && player.id) {
+                        const playerId = player.id;
+                        const points = (cycle.team2Scores && cycle.team2Scores[index]) || 0;
                         
-                        console.log(`Team 2 Player ${playerId}: ${points} points`);
+                        // Only include players who were active this cycle
+                        if (player.active !== false) {  // Default to true if not specified
+                            clean.team2[playerId] = points;
+                            clean.activePlayers.team2.push(playerId);
+                            console.log(`Team 2 Active Player ${playerId}: ${points} points`);
+                        } else {
+                            console.log(`Team 2 Inactive Player ${playerId}: Skipping`);
+                        }
                     }
                 });
             }
@@ -3519,10 +3956,11 @@
             clean.team2Bonus = (cycle.team2Bonus !== undefined) ? cycle.team2Bonus : 
                              (cycle.bonus && cycle.bonus.team2) || 0;
             
-            console.log(`Team 1 Bonus: ${clean.team1Bonus}`);
-            console.log(`Team 2 Bonus: ${clean.team2Bonus}`);
+            console.log(`Team 1 Active Players: ${clean.activePlayers.team1.join(', ')}`);
+            console.log(`Team 2 Active Players: ${clean.activePlayers.team2.join(', ')}`);
+            console.log(`Team 1 Bonus: ${clean.team1Bonus}, Team 2 Bonus: ${clean.team2Bonus}`);
             
-            // Process buzzes
+            // Process buzzes with active player validation
             if (cycle.buzzes && Array.isArray(cycle.buzzes)) {
                 console.log(`Processing ${cycle.buzzes.length} buzzes`);
                 
@@ -3530,12 +3968,21 @@
                     if (buzz && buzz.wordIndex !== undefined) {
                         const totalWords = cycle.words?.length || 100;
                         const percentComplete = (buzz.wordIndex / totalWords).toFixed(5);
-                        const buzzResult = buzz.isCorrect ? 'Correct' : 'Incorrect';
-                        clean.buzzes[percentComplete] = buzzResult;
                         
-                        console.log(`Buzz ${idx + 1}: Word ${buzz.wordIndex}/${totalWords} (${percentComplete}%) - ${buzzResult}`);
-                    } else {
-                        console.warn(`Invalid buzz at index ${idx}:`, buzz);
+                        // Include all buzz information
+                        clean.buzzes[percentComplete] = {
+                            team: buzz.team || (buzz.teamNum || (buzz.teamNum === 0 ? 0 : 1)), // Default to team 1 if not specified
+                            playerId: buzz.playerId,
+                            playerName: buzz.playerName || `Player ${buzz.playerId}`,
+                            isCorrect: !!buzz.isCorrect,
+                            points: buzz.points || 0,
+                            wordIndex: buzz.wordIndex,
+                            timestamp: buzz.timestamp || new Date().toISOString()
+                        };
+                        
+                        console.log(`Buzz ${idx + 1}: Team ${clean.buzzes[percentComplete].team} ` +
+                                  `Player ${buzz.playerId} at ${percentComplete}% - ` +
+                                  `${buzz.isCorrect ? 'Correct' : 'Incorrect'}`);
                     }
                 });
             } else {
@@ -3548,6 +3995,23 @@
             console.groupEnd();
             
             return clean;
+        },
+        
+        // Calculate a single player's total points
+        calculatePlayerTotal: function(teamNum, playerIndex) {
+            let total = 0;
+            const tossupIndex = teamNum === 1 ? 0 : 2; // 0 for team1 tossups, 2 for team2 tossups
+            
+            this.scorecard.cycles.forEach(cycle => {
+                if (cycle.scores && cycle.scores[tossupIndex] && cycle.scores[tossupIndex][playerIndex] !== undefined) {
+                    const points = cycle.scores[tossupIndex][playerIndex];
+                    if (points !== null && points !== undefined) {
+                        total += points;
+                    }
+                }
+            });
+            
+            return total;
         },
         
         // Download scorecard as JSON file with simplified format
@@ -3920,7 +4384,8 @@
             
             const points = parseInt(button.dataset.points);
             const part = parseInt(button.dataset.part);
-            const teamNum = this.currentAnswerer ? this.currentAnswerer.team : 1; // Default to team 1 if no current answerer
+            // Use the team that earned the bonus, default to team 1 if not set (shouldn't happen)
+            const teamNum = this.bonusEligibleTeam || 1;
             
             console.log(`Scoring ${points} points for bonus part ${part} for team ${teamNum}`);
             

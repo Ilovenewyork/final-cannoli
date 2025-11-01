@@ -39,6 +39,12 @@ def team_schedule(tournament_id, teamname):
     aliases = TeamAlias.query.filter_by(tournament_id=tournament.id, stage_id=1).all()
     alias_dict = {alias.team_id: alias.team_name for alias in aliases}
     
+    # Get room aliases for the tournament
+    room_aliases = {alias.room_number: alias.room_name for alias in tournament.room_aliases}
+    
+    # Import the room utility function
+    from utils.room_utils import get_room_display_name
+    
     schedule_resolved = {}
     stages = format_data['tournament_format']['stages']
     for stage in stages:
@@ -61,7 +67,12 @@ def team_schedule(tournament_id, teamname):
             schedule_resolved[stage_name] = {'resolved': True, 'rounds': resolved_rounds}
         else:
             schedule_resolved[stage_name] = {'resolved': False, 'round_count': len(rounds)}
-    return render_template('schedule.html', teamname=teamname, tournament=tournament, schedule=schedule_resolved)
+    return render_template('schedule.html', 
+                         teamname=teamname, 
+                         tournament=tournament, 
+                         schedule=schedule_resolved,
+                         room_aliases=room_aliases,
+                         get_room_display_name=get_room_display_name)
 
 @public_bp.route('/schedule/<int:tournament_id>')
 def schedule_all(tournament_id):
@@ -73,6 +84,13 @@ def schedule_all(tournament_id):
     # Get all team aliases for this tournament
     aliases = TeamAlias.query.filter_by(tournament_id=tournament.id).all()
     alias_dict = {alias.team_id: alias.team_name for alias in aliases}
+    
+    # Get room aliases for this tournament
+    from models.room_alias import RoomAlias
+    room_aliases = {alias.room_number: alias.room_name for alias in RoomAlias.query.filter_by(tournament_id=tournament.id).all()}
+    
+    # Import the room utility function
+    from utils.room_utils import get_room_display_name
     
     # Get all games for this tournament
     games = Game.query.filter_by(tournament_id=tournament.id).order_by(Game.stage_id, Game.round_number).all()
@@ -169,36 +187,73 @@ def schedule_all(tournament_id):
                     # Initialize default values
                     score1 = 0
                     score2 = 0
-                    is_completed = False
+                    is_completed = game.result != -2  # -2 means not played
                     
                     # Extract scores from scorecard if available
                     if game.scorecard:
                         try:
                             scorecard_data = json.loads(game.scorecard)
-                            if isinstance(scorecard_data, list) and len(scorecard_data) > 0:
-                                # Scorecard is a list of question results, calculate totals
+                            if isinstance(scorecard_data, list):
                                 for q in scorecard_data:
-                                    if 'scores' in q and len(q['scores']) >= 4:
-                                        # Sum up the scores for team1 (index 0) and team2 (index 2)
+                                    # Handle both old and new scorecard formats
+                                    if 'team1' in q and 'team2' in q:
+                                        # New format with team1/team2 structure
+                                        score1 += sum(int(p) for p in q['team1'].values() if str(p).lstrip('-').isdigit())
+                                        score2 += sum(int(p) for p in q['team2'].values() if str(p).lstrip('-').isdigit())
+                                        
+                                        # Add bonus points if they exist
+                                        if 'team1Bonus' in q and isinstance(q['team1Bonus'], (int, float)):
+                                            score1 += int(q['team1Bonus'])
+                                        if 'team2Bonus' in q and isinstance(q['team2Bonus'], (int, float)):
+                                            score2 += int(q['team2Bonus'])
+                                    elif 'scores' in q and len(q['scores']) >= 4:
+                                        # Old format with scores array
                                         team1_scores = q['scores'][0]
                                         team2_scores = q['scores'][2]
                                         if isinstance(team1_scores, list):
                                             score1 += sum(s for s in team1_scores if isinstance(s, (int, float)))
                                         if isinstance(team2_scores, list):
                                             score2 += sum(s for s in team2_scores if isinstance(s, (int, float)))
+                            
+                            # Update the game result based on scores
+                            if score1 > score2:
+                                game.result = 1  # Team 1 wins
+                            elif score2 > score1:
+                                game.result = -1  # Team 2 wins
+                            else:
+                                game.result = 0  # Tie
+                            db.session.commit()
                                 
-                                # Consider game completed if there are any non-zero scores
-                                is_completed = score1 > 0 or score2 > 0
+                            # Consider game completed if we have non-zero scores
+                            is_completed = score1 > 0 or score2 > 0
+                            
+                        except Exception as e:
+                            current_app.logger.error(f"Error parsing scorecard for game {game.id}: {str(e)}")
+                            # Fall back to game.result if available
+                            if game.result is not None:
+                                is_completed = True
+                                if game.result == 1:
+                                    score1 = 1  # Indicate team 1 won
+                                    score2 = 0
+                                elif game.result == 2:
+                                    score1 = 0
+                                    score2 = 1  # Indicate team 2 won
+                                else:
+                                    score1 = score2 = 0  # Tie
                                 
                                 # Player names are not being displayed
                         except Exception as e:
                             print(f"Error parsing scorecard: {e}")
                     
+                    # Use match number as room number if no room is assigned
+                    room_number = getattr(game, 'room_number', match_number)
+                    
                     matches.append({
                         'match_number': match_number,
                         'teams': [team1_name, team2_name],
                         'scores': [score1, score2],
-                        'completed': is_completed
+                        'completed': is_completed,
+                        'room_number': room_number
                     })
                 
                 resolved_rounds.append({
@@ -222,11 +277,13 @@ def schedule_all(tournament_id):
                     for pairing in rnd.get('pairings', []):
                         teams = pairing.get('teams', [])
                         resolved = [alias_dict.get(t, t) for t in teams]
+                        match_num = pairing.get('match_number')
                         matches.append({
-                            'match_number': pairing.get('match_number'),
+                            'match_number': match_num,
                             'teams': resolved,
                             'scores': ["-", "-"],
-                            'completed': False
+                            'completed': False,
+                            'room_number': pairing.get('room_number', match_num)  # Default to match number if no room specified
                         })
                     resolved_rounds.append({
                         'round': round_label,
@@ -248,7 +305,9 @@ def schedule_all(tournament_id):
     return render_template('schedule.html', 
                          teamname=None, 
                          tournament=tournament, 
-                         schedule=schedule_resolved)
+                         schedule=schedule_resolved,
+                         room_aliases=room_aliases,
+                         get_room_display_name=get_room_display_name)
 
 class TeamStats:
     def __init__(self):
@@ -269,6 +328,10 @@ class PlayerStats:
         self.tossups_heard = 0
         self.tossup_points = 0
         self.ppth = 0.0  # Points per tossup heard
+        self.powers = 0    # 15 point answers
+        self.tens = 0      # 10 point answers
+        self.negs = 0      # -5 point answers
+        self.zeroes = 0    # 0 point answers (active but didn't buzz or got it wrong)
 
 @public_bp.route('/tournament/<int:tournament_id>/leaderboard')
 def team_leaderboard(tournament_id):
@@ -406,25 +469,79 @@ def team_leaderboard(tournament_id):
                 team1_cycle_points = 0
                 team2_cycle_points = 0
                 
-                # Process team1
+                # Count active players for team1 in this cycle and initialize statline tracking
+                team1_players = [p for p in players if p.team_id == team1_id]
+                active_team1_players = set()
+                
+                if 'team1Players' in cycle and isinstance(cycle['team1Players'], list):
+                    for i, is_active in enumerate(cycle['team1Players']):
+                        if is_active and i < len(team1_players):
+                            player_id = team1_players[i].id
+                            if player_id in player_stats:
+                                player_stats[player_id].tossups_heard += 1
+                                active_team1_players.add(player_id)
+                
+                # Initialize statline for active players who didn't buzz
+                for player_id in active_team1_players:
+                    player_stats[player_id].zeroes += 1
+                
+                # Process team1 players and update statline
                 if 'team1' in cycle and isinstance(cycle['team1'], dict):
                     for player_id, points in cycle['team1'].items():
                         if player_id.isdigit() and int(player_id) in player_stats:
+                            player_id = int(player_id)
                             points = int(points) if str(points).lstrip('-').isdigit() else 0
-                            player_stats[int(player_id)].tossup_points += points
-                            player_stats[int(player_id)].tossups_heard += 1
+                            player_stats[player_id].tossup_points += points
                             team_stats[team1_id].tossup_points += points
                             team1_cycle_points += points
+                            
+                            # Update statline
+                            if points == 15:
+                                player_stats[player_id].powers += 1
+                                player_stats[player_id].zeroes -= 1  # Remove the zero we added earlier
+                            elif points == 10:
+                                player_stats[player_id].tens += 1
+                                player_stats[player_id].zeroes -= 1  # Remove the zero we added earlier
+                            elif points == -5:
+                                player_stats[player_id].negs += 1
+                                player_stats[player_id].zeroes -= 1  # Remove the zero we added earlier
                 
-                # Process team2
+                # Count active players for team2 in this cycle and initialize statline tracking
+                team2_players = [p for p in players if p.team_id == team2_id]
+                active_team2_players = set()
+                
+                if 'team2Players' in cycle and isinstance(cycle['team2Players'], list):
+                    for i, is_active in enumerate(cycle['team2Players']):
+                        if is_active and i < len(team2_players):
+                            player_id = team2_players[i].id
+                            if player_id in player_stats:
+                                player_stats[player_id].tossups_heard += 1
+                                active_team2_players.add(player_id)
+                
+                # Initialize statline for active players who didn't buzz
+                for player_id in active_team2_players:
+                    player_stats[player_id].zeroes += 1
+                
+                # Process team2 players and update statline
                 if 'team2' in cycle and isinstance(cycle['team2'], dict):
                     for player_id, points in cycle['team2'].items():
                         if player_id.isdigit() and int(player_id) in player_stats:
+                            player_id = int(player_id)
                             points = int(points) if str(points).lstrip('-').isdigit() else 0
-                            player_stats[int(player_id)].tossup_points += points
-                            player_stats[int(player_id)].tossups_heard += 1
+                            player_stats[player_id].tossup_points += points
                             team_stats[team2_id].tossup_points += points
                             team2_cycle_points += points
+                            
+                            # Update statline
+                            if points == 15:
+                                player_stats[player_id].powers += 1
+                                player_stats[player_id].zeroes -= 1  # Remove the zero we added earlier
+                            elif points == 10:
+                                player_stats[player_id].tens += 1
+                                player_stats[player_id].zeroes -= 1  # Remove the zero we added earlier
+                            elif points == -5:
+                                player_stats[player_id].negs += 1
+                                player_stats[player_id].zeroes -= 1  # Remove the zero we added earlier
                 
                 # Process bonuses
                 for team_key, team_id in [('team1Bonus', team1_id), ('team2Bonus', team2_id)]:
@@ -524,16 +641,21 @@ def team_leaderboard(tournament_id):
         })
     
     player_data = []
-    for player_id, stats in sorted_players:
-        player = next((p for p in players if p.id == player_id), None)
+    for pid, stats in sorted_players:
+        player = next((p for p in players if p.id == pid), None)
         if player:
             player_data.append({
-                'id': player_id,
+                'id': player.id,
                 'name': player.name,
                 'team': team_id_to_name.get(player.team_id, f"Team {player.team_id}"),
                 'tossup_points': stats.tossup_points,
                 'tossups_heard': stats.tossups_heard,
-                'ppth': stats.ppth
+                'ppth': stats.ppth,
+                'statline': f"{stats.powers}/{stats.tens}/{stats.zeroes}/{stats.negs}",
+                'powers': stats.powers,
+                'tens': stats.tens,
+                'zeroes': stats.zeroes,
+                'negs': stats.negs
             })
     
     # Debug logging

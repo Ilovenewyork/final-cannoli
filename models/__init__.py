@@ -7,6 +7,7 @@ from .game import Game
 from .player import Player
 from .question import Question
 from .team_alias import TeamAlias
+from .room_alias import RoomAlias
 from .admin import Admin
 from .reader import Reader, ReaderTournament
 from .alert import Alert
@@ -19,6 +20,7 @@ __all__ = [
     'Player',
     'Question',
     'TeamAlias',
+    'RoomAlias',
     'Admin',
     'Alert',
     'Reader',

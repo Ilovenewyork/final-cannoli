@@ -54,7 +54,7 @@
                     <td class="border p-2 text-center">{{ i }}</td>
                     {% for j in range(players_team1|length) %}
                     <td class="border p-2">
-                      <input type="number" id="cycle_{{ i }}_team1_player_{{ j }}" value="0" class="w-full border rounded px-2 py-1" oninput="updateTotals();">
+                      <input type="number" id="cycle_{{ i }}_team1_player_{{ j }}" value="0" class="w-full border rounded px-2 py-1 player-score" data-team="1" data-cycle="{{ i }}" oninput="handleScoreInput(this); updateTotals();">
                     </td>
                     {% endfor %}
                     <td class="border p-2">
@@ -62,7 +62,7 @@
                     </td>
                     {% for j in range(players_team2|length) %}
                     <td class="border p-2">
-                      <input type="number" id="cycle_{{ i }}_team2_player_{{ j }}" value="0" class="w-full border rounded px-2 py-1" oninput="updateTotals();">
+                      <input type="number" id="cycle_{{ i }}_team2_player_{{ j }}" value="0" class="w-full border rounded px-2 py-1 player-score" data-team="2" data-cycle="{{ i }}" oninput="handleScoreInput(this); updateTotals();">
                     </td>
                     {% endfor %}
                     <td class="border p-2">
@@ -93,6 +93,41 @@
       </div>
     </footer>
   <script>
+    // Track the first incorrect buzz for each team per cycle
+    const firstIncorrectBuzz = {};
+    
+    function handleScoreInput(input) {
+      const team = input.dataset.team;
+      const cycle = input.dataset.cycle;
+      const value = parseInt(input.value) || 0;
+      
+      // If this is a neg (-5) and it's the first one for this team in this cycle
+      if (value === -5) {
+        if (!firstIncorrectBuzz[cycle]) {
+          firstIncorrectBuzz[cycle] = { team1: false, team2: false };
+        }
+        
+        // If this is not the first incorrect buzz for this team, reset to 0
+        if ((team === '1' && firstIncorrectBuzz[cycle].team1) || 
+            (team === '2' && firstIncorrectBuzz[cycle].team2)) {
+          input.value = '0';
+          return;
+        }
+        
+        // Mark that this team has had an incorrect buzz
+        if (team === '1') firstIncorrectBuzz[cycle].team1 = true;
+        if (team === '2') firstIncorrectBuzz[cycle].team2 = true;
+      }
+      
+      // If changing from -5 to something else, reset the flag
+      if (value !== -5) {
+        if (firstIncorrectBuzz[cycle]) {
+          if (team === '1') firstIncorrectBuzz[cycle].team1 = false;
+          if (team === '2') firstIncorrectBuzz[cycle].team2 = false;
+        }
+      }
+    }
+    
     function updateTotals() {
       let total1 = 0, total2 = 0;
       for (let i = 1; i <= 22; i++) {

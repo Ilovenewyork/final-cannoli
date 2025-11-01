@@ -31,13 +31,13 @@
                 </div>
                 <div class="col-md-4">
                     <p><strong>Status:</strong> {{ tournament.status|title }}</p>
-                    <p><strong>Your Room:</strong> Room {{ room_number }}</p>
+                    <p><strong>Your Room:</strong> {{ room_display_name }}</p>
                     <p><strong>Your Games:</strong> {{ games|length }}</p>
                 </div>
                 <div class="col-md-4">
                     <div class="alert alert-info">
                         <i class="bi bi-info-circle"></i>
-                        You are assigned to <strong>Room {{ room_number }}</strong>. 
+                        You are assigned to <strong>{{ room_display_name }}</strong>. 
                         You can only view and score games in this room.
                     </div>
                 </div>
@@ -100,13 +100,21 @@
                                      data-stage="{{ game.stage_id }}"
                                      data-team="{{ (game.team1 ~ ' ' ~ game.team2)|lower }}">
                                     <div class="card-body">
-                                        <h6 class="card-title">
-                                            <span class="{% if game.team1_pending %}text-primary{% endif %}">
-                    {{ game.team1 }}
-                    {% if game.team1_pending and game.team1_info %}
-                      <span class="text-sm font-normal text-gray-500 ml-1">(pending)</span>
-                    {% endif %}
-                  </span>
+                                        <div class="flex justify-between items-start mb-2">
+                                            <h6 class="card-title mb-0">
+                                                <span class="{% if game.team1_pending %}text-primary{% endif %}">
+                                                    {{ game.team1 }}
+                                                    {% if game.team1_pending and game.team1_info %}
+                                                        <span class="text-sm font-normal text-gray-500 ml-1">(pending)</span>
+                                                    {% endif %}
+                                                </span>
+                                            </h6>
+                                            {% if game.room_number %}
+                                                <span class="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                                    {{ get_room_display_name(tournament.id, game.room_number) }}
+                                                </span>
+                                            {% endif %}
+                                        </div>
                   <span class="mx-2 text-gray-500">vs</span>
                   <span class="{% if game.team2_pending %}text-blue-600{% endif %}">
                     {{ game.team2 }}

@@ -47,6 +47,9 @@
           <button onclick="showTab('readers')" id="readers-tab" class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
             Reader Management
           </button>
+          <button onclick="showTab('rooms')" id="rooms-tab" class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+            Room Management
+          </button>
           <button onclick="showTab('teams')" id="teams-tab" class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
             Team Management
           </button>
@@ -87,6 +90,112 @@
       </div>
         </div> <!-- End Overview Tab -->
 
+        <!-- Room Management Tab -->
+        <div id="rooms-tab-content" class="tab-pane hidden">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="text-2xl font-bold">Room Management</h2>
+            <a href="{{ url_for('admin.manage_rooms', tournament_id=tournament.id) }}" 
+               class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg flex items-center">
+              <i class="fas fa-door-open mr-2"></i> Manage Room Aliases
+            </a>
+          </div>
+          
+          <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h3 class="text-xl font-semibold mb-4">Current Room Assignments</h3>
+            
+            {% set reader_rooms = {}
+                %}{% for assignment in tournament.reader_assignments %}
+                    {% if assignment.room_number %}
+                        {% set _ = reader_rooms.setdefault(assignment.room_number, []).append(assignment.reader) %}
+                    {% endif %}
+                {% endfor %}
+            
+            {% if reader_rooms %}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {% for room_number, readers in reader_rooms|dictsort %}
+                        <div class="border rounded-lg p-4">
+                            <div class="font-semibold text-lg mb-2">
+                                {% set room_name = get_room_display_name(tournament.id, room_number) %}
+                                {{ room_name }}
+                                <span class="text-sm text-gray-500 ml-2">(Room {{ room_number }})</span>
+                            </div>
+                            {% if readers %}
+                                <div class="mt-2">
+                                    <div class="text-sm text-gray-600 mb-1">Assigned Readers:</div>
+                                    <ul class="list-disc pl-5">
+                                        {% for reader in readers %}
+                                            <li>{{ reader.email }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            {% else %}
+                                <p class="text-sm text-gray-500 italic">No readers assigned</p>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-8 text-gray-500">
+                    <p class="mb-4">No room assignments have been made yet.</p>
+                    <p>Assign readers to rooms in the Reader Management tab.</p>
+                </div>
+            {% endif %}
+          </div>
+        </div>
+        
+        <!-- Room Management Tab -->
+        <div id="rooms-tab-content" class="tab-pane hidden">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="text-2xl font-bold">Room Management</h2>
+            <a href="{{ url_for('admin.manage_rooms', tournament_id=tournament.id) }}" 
+               class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg flex items-center">
+              <i class="fas fa-door-open mr-2"></i> Manage Room Aliases
+            </a>
+          </div>
+          
+          <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h3 class="text-xl font-semibold mb-4">Current Room Assignments</h3>
+            
+            {% set reader_rooms = {}
+                %}{% for assignment in tournament.reader_assignments %}
+                    {% if assignment.room_number %}
+                        {% set _ = reader_rooms.setdefault(assignment.room_number, []).append(assignment.reader) %}
+                    {% endif %}
+                {% endfor %}
+            
+            {% if reader_rooms %}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {% for room_number, readers in reader_rooms|dictsort %}
+                        <div class="border rounded-lg p-4">
+                            <div class="font-semibold text-lg mb-2">
+                                {% set room_name = get_room_display_name(tournament.id, room_number) %}
+                                {{ room_name }}
+                                <span class="text-sm text-gray-500 ml-2">(Room {{ room_number }})</span>
+                            </div>
+                            {% if readers %}
+                                <div class="mt-2">
+                                    <div class="text-sm text-gray-600 mb-1">Assigned Readers:</div>
+                                    <ul class="list-disc pl-5">
+                                        {% for reader in readers %}
+                                            <li>{{ reader.email }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            {% else %}
+                                <p class="text-sm text-gray-500 italic">No readers assigned</p>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-8 text-gray-500">
+                    <p class="mb-4">No room assignments have been made yet.</p>
+                    <p>Assign readers to rooms in the Reader Management tab.</p>
+                </div>
+            {% endif %}
+          </div>
+        </div>
+        
         <!-- Reader Management Tab -->
         <div id="readers-tab-content" class="tab-pane hidden">
           <h2 class="text-3xl font-bold mb-4">Reader Management</h2>
@@ -148,7 +257,8 @@
                     <option value="" disabled selected>Select a room</option>
                     {% for i in range(1, max_rooms + 1) %}
                       {% if not assigned_rooms or i not in assigned_rooms %}
-                        <option value="{{ i }}">Room {{ i }}</option>
+                        {% set room_name = room_aliases.get(i, 'Room ' ~ i) %}
+                        <option value="{{ i }}">{{ room_name }}</option>
                       {% endif %}
                     {% endfor %}
                   </select>
@@ -607,8 +717,12 @@
     // Fetch alerts from the server
     async function fetchAlerts() {
       try {
-        console.log('Fetching alerts from /admin/alerts...');
-        const response = await fetch('/admin/alerts');
+        // Get the tournament ID from the URL
+        const tournamentId = window.location.pathname.split('/').pop();
+        console.log('Fetching alerts for tournament:', tournamentId);
+        
+        // Include tournament_id in the request
+        const response = await fetch(`/admin/alerts?tournament_id=${tournamentId}`);
         
         // Log response status and headers
         console.log('Response status:', response.status, response.statusText);

@@ -26,9 +26,6 @@
             </span>
           </h5>
           <div>
-            <button id="saveDraftBtn" class="btn btn-outline-primary me-2">
-              <i class="fas fa-save me-1"></i> Save Draft
-            </button>
             <button id="finalizeBtn" class="btn btn-success">
               <i class="fas fa-flag-checkered me-1"></i> Finalize Scorecard
             </button>
@@ -63,10 +60,10 @@
               <thead class="table-light">
                 <tr>
                   <th style="width: 50px;">#</th>
-                  <th style="min-width: 200px;">Question</th>
                   <th style="min-width: 300px;">Team 1 ({{ team1_name }})</th>
                   <th style="min-width: 300px;">Team 2 ({{ team2_name }})</th>
                   <th style="min-width: 200px;">Bonus</th>
+                  <th style="width: 100px;">Actions</th>
                 </tr>
               </thead>
               <tbody id="scorecardBody">
@@ -77,46 +74,71 @@
                     <strong>{{ i + 1 }}</strong>
                   </td>
                   <td>
-                    <div class="form-floating">
-                      <textarea class="form-control question-text" 
-                                data-tossup-index="{{ i }}" 
-                                style="height: 100px; min-height: 100px;"
-                                placeholder="Tossup {{ i + 1 }}">{{ questions[i].question_text if i < questions|length else '' }}</textarea>
-                      <label>Tossup {{ i + 1 }}</label>
-                    </div>
-                  </td>
-                  <td>
                     <div class="team-answers" data-team="team1" data-tossup-index="{{ i }}">
                       {% for player in team1_players %}
                       <div class="input-group mb-2">
-                        <span class="input-group-text">{{ player.name }}{% if player.number %} ({{ player.number }}){% endif %}</span>
                         <select class="form-select player-score" 
                                 data-player-id="{{ player.id }}" 
                                 data-tossup-index="{{ i }}">
-                          <option value="0">0</option>
-                          <option value="-5" {% if tossup.team1[player.id|string] == -5 %}selected{% endif %}>Neg (-5)</option>
-                          <option value="10" {% if tossup.team1[player.id|string] == 10 %}selected{% endif %}>Correct (10)</option>
-                          <option value="15" {% if tossup.team1[player.id|string] == 15 %}selected{% endif %}>Power (15)</option>
+                          <option value="0">0 - {{ player.name }}{% if player.number %} ({{ player.number }}){% endif %}</option>
+                          <option value="-5" {% if tossup.team1[player.id|string] == -5 %}selected{% endif %}>-5 - {{ player.name }}</option>
+                          <option value="10" {% if tossup.team1[player.id|string] == 10 %}selected{% endif %}>10 - {{ player.name }}</option>
+                          <option value="15" {% if tossup.team1[player.id|string] == 15 %}selected{% endif %}>15 - {{ player.name }}</option>
                         </select>
                       </div>
                       {% endfor %}
+                      <div class="active-players mt-2 p-2 border rounded">
+                        <small class="text-muted d-block mb-1">Active Players:</small>
+                        <div class="d-flex flex-wrap">
+                          {% for player in team1_players %}
+                          <div class="form-check form-check-inline me-2">
+                            <input class="form-check-input active-player" 
+                                   type="checkbox" 
+                                   data-tossup-index="{{ i }}"
+                                   data-team="team1"
+                                   data-player-id="{{ player.id }}"
+                                   {% if not tossup.team1Players or tossup.team1Players[loop.index0] == 1 %}checked{% endif %}>
+                            <label class="form-check-label small">
+                              {{ player.name.split()|last|first }}{{ player.name.split()[-1]|first if player.name.split()|length > 1 else '' }}
+                            </label>
+                          </div>
+                          {% endfor %}
+                        </div>
+                      </div>
                     </div>
                   </td>
                   <td>
                     <div class="team-answers" data-team="team2" data-tossup-index="{{ i }}">
                       {% for player in team2_players %}
                       <div class="input-group mb-2">
-                        <span class="input-group-text">{{ player.name }}{% if player.number %} ({{ player.number }}){% endif %}</span>
                         <select class="form-select player-score" 
                                 data-player-id="{{ player.id }}" 
                                 data-tossup-index="{{ i }}">
-                          <option value="0">0</option>
-                          <option value="-5" {% if tossup.team2[player.id|string] == -5 %}selected{% endif %}>Neg (-5)</option>
-                          <option value="10" {% if tossup.team2[player.id|string] == 10 %}selected{% endif %}>Correct (10)</option>
-                          <option value="15" {% if tossup.team2[player.id|string] == 15 %}selected{% endif %}>Power (15)</option>
+                          <option value="0">0 - {{ player.name }}{% if player.number %} ({{ player.number }}){% endif %}</option>
+                          <option value="-5" {% if tossup.team2[player.id|string] == -5 %}selected{% endif %}>-5 - {{ player.name }}</option>
+                          <option value="10" {% if tossup.team2[player.id|string] == 10 %}selected{% endif %}>10 - {{ player.name }}</option>
+                          <option value="15" {% if tossup.team2[player.id|string] == 15 %}selected{% endif %}>15 - {{ player.name }}</option>
                         </select>
                       </div>
                       {% endfor %}
+                      <div class="active-players mt-2 p-2 border rounded">
+                        <small class="text-muted d-block mb-1">Active Players:</small>
+                        <div class="d-flex flex-wrap">
+                          {% for player in team2_players %}
+                          <div class="form-check form-check-inline me-2">
+                            <input class="form-check-input active-player" 
+                                   type="checkbox" 
+                                   data-tossup-index="{{ i }}"
+                                   data-team="team2"
+                                   data-player-id="{{ player.id }}"
+                                   {% if not tossup.team2Players or tossup.team2Players[loop.index0] == 1 %}checked{% endif %}>
+                            <label class="form-check-label small">
+                              {{ player.name.split()|last|first }}{{ player.name.split()[-1]|first if player.name.split()|length > 1 else '' }}
+                            </label>
+                          </div>
+                          {% endfor %}
+                        </div>
+                      </div>
                     </div>
                   </td>
                   <td>
@@ -142,20 +164,25 @@
                                step="10">
                       </div>
                     </div>
-                    </div>
+                  </td>
+                  <td class="align-middle">
+                    <button type="button" class="btn btn-sm btn-outline-danger remove-question" data-tossup-index="{{ i }}">
+                      <i class="fas fa-trash"></i> Remove
+                    </button>
                   </td>
                 </tr>
                 {% endfor %}
               </tbody>
               <tfoot class="table-light">
                 <tr>
-                  <th colspan="2">Totals</th>
+                  <th>Totals</th>
                   <th id="team1Total">0</th>
                   <th id="team2Total">0</th>
                   <th id="bonusTotal">-</th>
+                  <th></th>
                 </tr>
                 <tr>
-                  <th colspan="2">Final Score</th>
+                  <th>Final Score</th>
                   <th id="team1Final">0</th>
                   <th id="team2Final">0</th>
                   <th>
@@ -166,23 +193,16 @@
                       <option value="-1" {% if game.result == -1 %}selected{% endif %}>Tie</option>
                     </select>
                   </th>
+                  <th></th>
                 </tr>
               </tfoot>
             </table>
           </div>
           
-          <div class="d-flex justify-content-between mt-4">
+          <div class="d-flex justify-content-start mt-4">
             <button id="addQuestionBtn" class="btn btn-outline-primary">
               <i class="fas fa-plus me-1"></i> Add Question
             </button>
-            <div>
-              <button id="saveDraftBtn" class="btn btn-outline-secondary me-2">
-                <i class="fas fa-save me-1"></i> Save Draft
-              </button>
-              <button id="finalizeBtn" class="btn btn-success">
-                <i class="fas fa-check-circle me-1"></i> Finalize Scorecard
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -226,325 +246,300 @@
 {{ super() }}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  // Initialize tooltips
-  var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-  var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-    return new bootstrap.Tooltip(tooltipTriggerEl);
-  });
-
-  // Calculate totals
-  function calculateTotals() {
-    const scorecard = [];
-    let team1TossupTotal = 0;
-    let team2TossupTotal = 0;
-    let team1BonusTotal = 0;
-    let team2BonusTotal = 0;
+  try {
+    // Initialize event listeners
+    initializeEventListeners();
     
-    // Process each tossup
-    document.querySelectorAll('tr[data-tossup-index]').forEach(row => {
-      const tossupIndex = parseInt(row.dataset.tossupIndex);
-      const tossupData = {
-        team1: {},
-        team2: {},
-        team1Bonus: 0,
-        team2Bonus: 0,
-        buzzes: {}
-      };
+    // Calculate initial totals
+    calculateTotals();
+    
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+      return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+  } catch (error) {
+    console.error('Error initializing scorecard:', error);
+  }
+});
+
+// Initialize tooltips
+var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+  return new bootstrap.Tooltip(tooltipTriggerEl);
+});
+
+// Calculate totals
+function calculateTotals() {
+  const scorecard = [];
+  let team1TossupTotal = 0;
+  let team2TossupTotal = 0;
+  let team1BonusTotal = 0;
+  let team2BonusTotal = 0;
+  
+  // Process each tossup
+  document.querySelectorAll('tr[data-tossup-index]').forEach(row => {
+    const tossupIndex = parseInt(row.dataset.tossupIndex);
+    const tossupData = {
+      team1: {},
+      team2: {},
+      team1Bonus: 0,
+      team2Bonus: 0,
+      team1Players: [],
+      team2Players: [],
+      buzzes: {}
+    };
+    
+    // Process team 1 answers and active players
+    const team1Answers = row.querySelector('[data-team="team1"]');
+    if (team1Answers) {
+      // Process active players first
+      const activeCheckboxes = team1Answers.querySelectorAll('.active-player[data-team="team1"]');
+      tossupData.team1Players = Array.from(activeCheckboxes).map(cb => cb.checked ? 1 : 0);
       
-      // Process team 1 answers
-      const team1Answers = row.querySelector('[data-team="team1"]');
-      if (team1Answers) {
-        team1Answers.querySelectorAll('.player-score').forEach(select => {
-          const playerId = select.dataset.playerId;
-          const points = parseInt(select.value) || 0;
-          if (points !== 0) {
-            tossupData.team1[playerId] = points;
-            team1TossupTotal += points;
-          }
-        });
-      }
+      // Process player scores
+      team1Answers.querySelectorAll('.player-score').forEach(select => {
+        const playerId = select.dataset.playerId;
+        const points = parseInt(select.value) || 0;
+        if (points !== 0) {
+          tossupData.team1[playerId] = points;
+          team1TossupTotal += points;
+        }
+      });
+    }
+    
+    // Process team 2 answers and active players
+    const team2Answers = row.querySelector('[data-team="team2"]');
+    if (team2Answers) {
+      // Process active players first
+      const activeCheckboxes = team2Answers.querySelectorAll('.active-player[data-team="team2"]');
+      tossupData.team2Players = Array.from(activeCheckboxes).map(cb => cb.checked ? 1 : 0);
       
-      // Process team 2 answers
-      const team2Answers = row.querySelector('[data-team="team2"]');
-      if (team2Answers) {
-        team2Answers.querySelectorAll('.player-score').forEach(select => {
-          const playerId = select.dataset.playerId;
-          const points = parseInt(select.value) || 0;
-          if (points !== 0) {
-            tossupData.team2[playerId] = points;
-            team2TossupTotal += points;
-          }
-        });
-      }
-      
-      // Process bonus points
-      const team1BonusInput = row.querySelector('.bonus-points[data-team="team1"]');
-      const team2BonusInput = row.querySelector('.bonus-points[data-team="team2"]');
-      
-      if (team1BonusInput) {
-        const bonus = parseInt(team1BonusInput.value) || 0;
-        tossupData.team1Bonus = bonus;
-        team1BonusTotal += bonus;
-      }
-      
-      if (team2BonusInput) {
-        const bonus = parseInt(team2BonusInput.value) || 0;
-        tossupData.team2Bonus = bonus;
-        team2BonusTotal += bonus;
-      }
-      
-      scorecard.push(tossupData);
+      // Process player scores
+      team2Answers.querySelectorAll('.player-score').forEach(select => {
+        const playerId = select.dataset.playerId;
+        const points = parseInt(select.value) || 0;
+        if (points !== 0) {
+          tossupData.team2[playerId] = points;
+          team2TossupTotal += points;
+        }
+      });
+    }
+    
+    // Process bonus points
+    const team1BonusInput = row.querySelector('.bonus-points[data-team="team1"]');
+    const team2BonusInput = row.querySelector('.bonus-points[data-team="team2"]');
+    
+    if (team1BonusInput) {
+      const bonus = parseInt(team1BonusInput.value) || 0;
+      tossupData.team1Bonus = bonus;
+      team1BonusTotal += bonus;
+    }
+    
+    if (team2BonusInput) {
+      const bonus = parseInt(team2BonusInput.value) || 0;
+      tossupData.team2Bonus = bonus;
+      team2BonusTotal += bonus;
+    }
+    
+    scorecard.push(tossupData);
+  });
+  
+  const team1Total = team1TossupTotal + team1BonusTotal;
+  const team2Total = team2TossupTotal + team2BonusTotal;
+  
+  // Update the UI
+  document.getElementById('team1Total').textContent = team1TossupTotal;
+  document.getElementById('team2Total').textContent = team2TossupTotal;
+  document.getElementById('bonusTotal').textContent = team1BonusTotal + team2BonusTotal;
+  document.getElementById('team1Final').textContent = team1Total;
+  document.getElementById('team2Final').textContent = team2Total;
+  
+  // Update game result if needed
+  const gameResult = document.getElementById('gameResult');
+  if (team1Total > team2Total) {
+    gameResult.value = '1';
+  } else if (team2Total > team1Total) {
+    gameResult.value = '2';
+  } else if (team1Total > 0) {
+    gameResult.value = '-1';
+  }
+  
+  return scorecard;
+}
+
+// Enable/disable bonus points based on bonus team selection
+document.addEventListener('change', function(e) {
+  if (e.target.classList.contains('bonus-team')) {
+    const bonusPoints = e.target.closest('td').querySelector('.bonus-points');
+    if (e.target.value) {
+      bonusPoints.disabled = false;
+    } else {
+      bonusPoints.disabled = true;
+      bonusPoints.value = '0';
+    }
+    calculateTotals();
+  } else if (e.target.classList.contains('team1-answer') || 
+             e.target.classList.contains('team2-answer') ||
+             e.target.classList.contains('bonus-points')) {
+    calculateTotals();
+  }
+});
+
+// Save scorecard
+async function saveScorecard(finalize = false) {
+  const scorecard = calculateTotals();
+  const result = document.getElementById('gameResult').value;
+  
+  try {
+    const response = await fetch(`/admin/tournament/{{ tournament.id }}/game/{{ game.id }}/scorecard`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token() }}'
+      },
+      body: JSON.stringify({
+        scorecard: scorecard,
+        result: result
+      })
     });
     
-    const team1Total = team1TossupTotal + team1BonusTotal;
-    const team2Total = team2TossupTotal + team2BonusTotal;
+    const data = await response.json();
     
-    // Update the UI
-    document.getElementById('team1Total').textContent = team1TossupTotal;
-    document.getElementById('team2Total').textContent = team2TossupTotal;
-    document.getElementById('bonusTotal').textContent = team1BonusTotal + team2BonusTotal;
-    document.getElementById('team1Final').textContent = team1Total;
-    document.getElementById('team2Final').textContent = team2Total;
-    
-    // Update game result if needed
-    const gameResult = document.getElementById('gameResult');
-    if (team1Total > team2Total) {
-      gameResult.value = '1';
-    } else if (team2Total > team1Total) {
-      gameResult.value = '2';
-    } else if (team1Total > 0) {
-      gameResult.value = '-1';
-    }
-    
-    return scorecard;
-  }
-  
-  // Enable/disable bonus points based on bonus team selection
-  document.addEventListener('change', function(e) {
-    if (e.target.classList.contains('bonus-team')) {
-      const bonusPoints = e.target.closest('td').querySelector('.bonus-points');
-      if (e.target.value) {
-        bonusPoints.disabled = false;
+    if (response.ok) {
+      // Update the displayed scores with the server-calculated values
+      document.getElementById('team1Final').textContent = data.team1_score || 0;
+      document.getElementById('team2Final').textContent = data.team2_score || 0;
+      
+      if (finalize) {
+        window.location.href = `{{ url_for('admin.tournament_details', tournament_id=tournament.id) }}`;
       } else {
-        bonusPoints.disabled = true;
-        bonusPoints.value = '0';
-      }
-      calculateTotals();
-    } else if (e.target.classList.contains('team1-answer') || 
-               e.target.classList.contains('team2-answer') ||
-               e.target.classList.contains('bonus-points')) {
-      calculateTotals();
-    }
-  });
-  
-  // Save scorecard
-  async function saveScorecard(finalize = false) {
-    const scorecard = calculateTotals();
-    const result = document.getElementById('gameResult').value;
-    
-    try {
-      const response = await fetch(`/admin/tournament/{{ tournament.id }}/game/{{ game.id }}/scorecard`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': '{{ csrf_token() }}'
-        },
-        body: JSON.stringify({
-          scorecard: scorecard,
-          result: result
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        // Update the displayed scores with the server-calculated values
-        document.getElementById('team1Final').textContent = data.team1_score || 0;
-        document.getElementById('team2Final').textContent = data.team2_score || 0;
-        
-        if (finalize) {
-          window.location.href = `{{ url_for('admin.tournament_details', tournament_id=tournament.id) }}`;
-        } else {
-          // Show success message
-          const toast = document.createElement('div');
-          toast.className = 'position-fixed bottom-0 end-0 p-3';
-          toast.innerHTML = `
-            <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
-              <div class="toast-header bg-success text-white">
-                <strong class="me-auto">Success</strong>
-                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
-              </div>
-              <div class="toast-body">
-                Scorecard saved successfully!
-              </div>
+        // Show success message
+        const toast = document.createElement('div');
+        toast.className = 'position-fixed bottom-0 end-0 p-3';
+        toast.innerHTML = `
+          <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header bg-success text-white">
+              <strong class="me-auto">Success</strong>
+              <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
-          `;
-          document.body.appendChild(toast);
-          setTimeout(() => {
-            toast.remove();
-          }, 3000);
-        }
-      } else {
-        throw new Error(data.message || 'Failed to save scorecard');
+            <div class="toast-body">
+              Scorecard saved successfully!
+            </div>
+          </div>
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+          toast.remove();
+        }, 3000);
       }
-    } catch (error) {
-      console.error('Error saving scorecard:', error);
-      alert(`Error: ${error.message}`);
-    }
-  }
-  
-  // Add question
-  document.getElementById('addQuestionBtn').addEventListener('click', function() {
-    const modal = new bootstrap.Modal(document.getElementById('addQuestionModal'));
-    modal.show();
-  });
-  
-  document.getElementById('confirmAddQuestion').addEventListener('click', function() {
-    const questionText = document.getElementById('newQuestionText').value.trim();
-    const position = parseInt(document.getElementById('newQuestionPosition').value);
-    
-    if (!questionText) {
-      alert('Please enter question text');
-      return;
-    }
-    
-    // Create a new question ID (temporary, will be replaced by server)
-    const tempId = 'new-' + Date.now();
-    
-    // Create a new row
-    const newRow = document.createElement('tr');
-    newRow.dataset.questionId = tempId;
-    newRow.innerHTML = `
-      <td>${position === -1 ? document.querySelectorAll('tr[data-question-id]').length + 1 : position + 1}</td>
-      <td>
-        <div class="form-floating">
-          <textarea class="form-control question-text" 
-                    data-question-id="${tempId}" 
-                    style="height: 100px;">${questionText}</textarea>
-          <label>Question ${position === -1 ? document.querySelectorAll('tr[data-question-id]').length + 1 : position + 1}</label>
-        </div>
-      </td>
-      <td>
-        <div class="form-group">
-          <select class="form-select team1-answer" data-question-id="${tempId}">
-            <option value="">No Answer</option>
-            <option value="15">Power (15)</option>
-            <option value="10">Correct (10)</option>
-            <option value="-5">Neg (-5)</option>
-          </select>
-          <select class="form-select mt-2 team1-player" data-question-id="${tempId}">
-            <option value="">Select Player</option>
-            {% for player in team1_players %}
-            <option value="{{ player.id }}">{{ player.name }}{% if player.number %} ({{ player.number }}){% endif %}</option>
-            {% endfor %}
-          </select>
-        </div>
-      </td>
-      <td>
-        <div class="form-group">
-          <select class="form-select team2-answer" data-question-id="${tempId}">
-            <option value="">No Answer</option>
-            <option value="15">Power (15)</option>
-            <option value="10">Correct (10)</option>
-            <option value="-5">Neg (-5)</option>
-          </select>
-          <select class="form-select mt-2 team2-player" data-question-id="${tempId}">
-            <option value="">Select Player</option>
-            {% for player in team2_players %}
-            <option value="{{ player.id }}">{{ player.name }}{% if player.number %} ({{ player.number }}){% endif %}</option>
-            {% endfor %}
-          </select>
-        </div>
-      </td>
-      <td>
-        <div class="form-group">
-          <select class="form-select bonus-team" data-question-id="${tempId}">
-            <option value="">No Bonus</option>
-            <option value="1">Team 1 ({{ team1_name }})</option>
-            <option value="2">Team 2 ({{ team2_name }})</option>
-          </select>
-          <select class="form-select mt-2 bonus-points" data-question-id="${tempId}" disabled>
-            <option value="0">0 pts</option>
-            <option value="10">10 pts</option>
-            <option value="20">20 pts</option>
-            <option value="30">30 pts</option>
-          </select>
-        </div>
-      </td>
-    `;
-    
-    // Insert the new row
-    const tbody = document.querySelector('#scorecardTable tbody');
-    if (position === -1) {
-      tbody.appendChild(newRow);
     } else {
-      const rows = document.querySelectorAll('tr[data-question-id]');
-      if (position >= rows.length) {
-        tbody.appendChild(newRow);
-      } else {
-        tbody.insertBefore(newRow, rows[position]);
-      }
+      throw new Error(data.message || 'Failed to save scorecard');
+    }
+  } catch (error) {
+    console.error('Error saving scorecard:', error);
+    alert(`Error: ${error.message}`);
+  }
+}
+
+// Update question numbers
+function updateQuestionNumbers() {
+  const rows = document.querySelectorAll('#scorecardBody tr');
+  rows.forEach((row, index) => {
+    const numberCell = row.querySelector('td:first-child strong');
+    if (numberCell) {
+      numberCell.textContent = index + 1;
     }
     
-    // Update question numbers
-    updateQuestionNumbers();
-    
-    // Close the modal
-    const modal = bootstrap.Modal.getInstance(document.getElementById('addQuestionModal'));
-    modal.hide();
-    
-    // Reset form
-    document.getElementById('newQuestionText').value = '';
-    document.getElementById('newQuestionPosition').value = '-1';
+    // Update all data-tossup-index attributes
+    row.setAttribute('data-tossup-index', index);
+    row.querySelectorAll('[data-tossup-index]').forEach(el => {
+      el.setAttribute('data-tossup-index', index);
+    });
   });
+}
+
+// Add question
+function addNewQuestionRow() {
+  const tbody = document.getElementById('scorecardBody');
+  const newIndex = tbody.children.length;
+  
+  // Create a new row by cloning the first row
+  const firstRow = tbody.firstElementChild;
+  if (!firstRow) return;
+  
+  const newRow = firstRow.cloneNode(true);
+  
+  // Update all data attributes and values
+  newRow.setAttribute('data-tossup-index', newIndex);
+  
+  // Reset all form elements
+  newRow.querySelectorAll('select, input').forEach(el => {
+    if (el.type === 'select-one') {
+      el.selectedIndex = 0;
+    } else if (el.type === 'number') {
+      el.value = '0';
+    } else if (el.type === 'checkbox') {
+      el.checked = true;
+    }
+  });
+  
+  // Add the new row to the table
+  tbody.appendChild(newRow);
   
   // Update question numbers
-  function updateQuestionNumbers() {
-    document.querySelectorAll('tr[data-question-id]').forEach((row, index) => {
-      row.cells[0].textContent = index + 1;
-      const label = row.querySelector('label');
-      if (label) {
-        label.textContent = `Question ${index + 1}`;
-      }
-    });
-    
-    // Update position dropdown in the add question modal
-    const positionSelect = document.getElementById('newQuestionPosition');
-    const currentOptions = positionSelect.querySelectorAll('option:not([value="-1"])');
-    currentOptions.forEach(option => option.remove());
-    
-    const questionCount = document.querySelectorAll('tr[data-question-id]').length;
-    for (let i = 1; i <= questionCount; i++) {
-      const option = document.createElement('option');
-      option.value = i;
-      option.textContent = `After question ${i}`;
-      positionSelect.appendChild(option);
-    }
+  updateQuestionNumbers();
+  
+  // Recalculate totals
+  calculateTotals();
+}
+
+// Initialize event listeners
+function initializeEventListeners() {
+  // Add question button
+  const addButton = document.getElementById('addQuestionBtn');
+  if (addButton) {
+    addButton.addEventListener('click', addNewQuestionRow);
   }
   
-  // Initialize totals
-  calculateTotals();
-  
-  // Set up event listeners
-  document.getElementById('saveDraftBtn').addEventListener('click', () => saveScorecard(false));
-  document.getElementById('finalizeBtn').addEventListener('click', () => saveScorecard(true));
-  
-  // Add change listeners for form controls
-  document.addEventListener('change', (e) => {
-    if (e.target.matches('.player-score, .bonus-points')) {
-      calculateTotals();
+  // Remove question
+  document.addEventListener('click', function(e) {
+    if (e.target.closest('.remove-question')) {
+      const button = e.target.closest('.remove-question');
+      const row = button.closest('tr');
+      
+      // Only remove if there's more than one question
+      if (document.querySelectorAll('#scorecardBody tr').length > 1) {
+        row.remove();
+        updateQuestionNumbers();
+        calculateTotals();
+      } else {
+        alert('You must have at least one question in the scorecard.');
+      }
     }
   });
   
   // Add input listeners for number inputs to update totals as user types
   document.addEventListener('input', (e) => {
-    if (e.target.matches('.bonus-points')) {
+    if (e.target.matches('.bonus-points') || 
+        e.target.matches('.player-score') ||
+        e.target.matches('.bonus-team')) {
       calculateTotals();
     }
   });
   
   // Handle game result change
-  document.getElementById('gameResult').addEventListener('change', calculateTotals);
-});
+  const gameResult = document.getElementById('gameResult');
+  if (gameResult) {
+    gameResult.addEventListener('change', calculateTotals);
+  }
+  
+  // Finalize button
+  const finalizeBtn = document.getElementById('finalizeBtn');
+  if (finalizeBtn) {
+    finalizeBtn.addEventListener('click', () => saveScorecard(true));
+  }
+  
+}
 </script>
 {% endblock %}

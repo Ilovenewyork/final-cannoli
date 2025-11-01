@@ -218,18 +218,28 @@ def tournament_games(tournament_id):
         game.stage_name = f"Stage {game.stage_id}" if game.stage_id else "Prelims"
         game.round_name = f"Round {game.round_number}" if game.round_number else "Unknown Round"
     
+    # Import the room utility function
+    from utils.room_utils import get_room_display_name
+    
+    # Get room display name with fallback to room number
+    room_display_name = get_room_display_name(tournament.id, room_number)
+    
     # If no games found for this room, show a message
     if not games:
-        flash(f'No games found for Room {room_number}. Please check back later.', 'info')
+        flash(f'No games found for {room_display_name}. Please check back later.', 'info')
         return render_template('reader/tournament_games.html', 
                              tournament=tournament, 
                              games=games,
-                             room_number=room_number)
+                             room_number=room_number,
+                             room_display_name=room_display_name,
+                             get_room_display_name=get_room_display_name)
     
     return render_template('reader/tournament_games.html', 
                          tournament=tournament, 
                          games=games,
-                         room_number=room_number)
+                         room_number=room_number,
+                         room_display_name=room_display_name,
+                         get_room_display_name=get_room_display_name)
 
 def resolve_team_reference(tournament_id, team_ref, depth=0, max_depth=5):
     """

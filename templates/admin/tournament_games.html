@@ -41,7 +41,6 @@
                           <th>#</th>
                           <th>Teams</th>
                           <th>Status</th>
-                          <th>Score</th>
                           <th>Actions</th>
                         </tr>
                       </thead>
@@ -67,9 +66,6 @@
                               {% else %}
                                 <span class="badge bg-secondary">Not Started</span>
                               {% endif %}
-                            </td>
-                            <td>
-                              {{ game.team1_score or '0' }} - {{ game.team2_score or '0' }}
                             </td>
                             <td>
                               <a href="{{ url_for('admin.edit_game_scorecard', tournament_id=tournament.id, game_id=game.id) }}" 

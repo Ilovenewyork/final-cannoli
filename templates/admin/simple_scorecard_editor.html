@@ -1,0 +1,434 @@
+{% extends "admin/base.html" %}
+
+{% block page_title %}
+  Edit Scorecard: {{ game.name or ("Game " ~ game.id) }}
+  <a href="{{ url_for('admin.tournament_details', tournament_id=tournament.id) }}" class="btn btn-outline-secondary btn-sm ms-2">
+    <i class="fas fa-arrow-left me-1"></i> Back to Tournament
+  </a>
+{% endblock %}
+
+{% block admin_content %}
+<div class="container-fluid">
+  <div class="row mb-4">
+    <div class="col-md-12">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">
+            {{ team1_name }} vs {{ team2_name }}
+            <span class="badge bg-primary ms-2">
+              {% if game.stage_id %}Stage {{ game.stage_id }}{% else %}Stage 1{% endif %}
+              - Round {{ game.round_number }}
+              {% if game.match_number %}- Match {{ game.match_number }}{% endif %}
+            </span>
+          </h5>
+        </div>
+        <div class="card-body">
+          <form id="scorecardForm">
+            <div class="table-responsive">
+              <table class="table table-bordered table-hover">
+                <thead class="table-light">
+                  <tr>
+                    <th>#</th>
+                    <th>Team 1 ({{ team1_name }})</th>
+                    <th>Team 2 ({{ team2_name }})</th>
+                    <th>Active Players</th>
+                    <th>Team 1 Bonus</th>
+                    <th>Team 2 Bonus</th>
+                  </tr>
+                </thead>
+                <tbody id="scorecardBody">
+                  {% for i in range(scorecard|length) %}
+                  {% set cycle = scorecard[i] %}
+                  <tr>
+                    <td class="align-middle">{{ i + 1 }}</td>
+                    <td>
+                      {% for player in team1_players %}
+                      <div class="input-group mb-2">
+                        <span class="input-group-text">{{ player.name }}</span>
+                        <select class="form-select player-score" 
+                                name="cycle_{{ i }}_team1_{{ player.id }}"
+                                data-cycle="{{ i }}" 
+                                data-team="1" 
+                                data-player="{{ player.id }}">
+                          <option value="0" {% if cycle.team1[player.id|string] == 0 %}selected{% endif %}>0</option>
+                          <option value="-5" {% if cycle.team1[player.id|string] == -5 %}selected{% endif %}>Neg (-5)</option>
+                          <option value="10" {% if cycle.team1[player.id|string] == 10 %}selected{% endif %}>Correct (10)</option>
+                          <option value="15" {% if cycle.team1[player.id|string] == 15 %}selected{% endif %}>Power (15)</option>
+                        </select>
+                      </div>
+                      {% endfor %}
+                    </td>
+                    <td>
+                      {% for player in team2_players %}
+                      <div class="input-group mb-2">
+                        <span class="input-group-text">{{ player.name }}</span>
+                        <select class="form-select player-score" 
+                                name="cycle_{{ i }}_team2_{{ player.id }}"
+                                data-cycle="{{ i }}" 
+                                data-team="2" 
+                                data-player="{{ player.id }}">
+                          <option value="0" {% if cycle.team2[player.id|string] == 0 %}selected{% endif %}>0</option>
+                          <option value="-5" {% if cycle.team2[player.id|string] == -5 %}selected{% endif %}>Neg (-5)</option>
+                          <option value="10" {% if cycle.team2[player.id|string] == 10 %}selected{% endif %}>Correct (10)</option>
+                          <option value="15" {% if cycle.team2[player.id|string] == 15 %}selected{% endif %}>Power (15)</option>
+                        </select>
+                      </div>
+                      {% endfor %}
+                    </td>
+                    <td class="align-middle">
+                      <div class="d-flex flex-column">
+                        {% for player in team1_players %}
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input active-player" 
+                                 type="checkbox" 
+                                 name="cycle_{{ i }}_active_1_{{ loop.index0 }}" 
+                                 data-cycle="{{ i }}" 
+                                 data-team="1" 
+                                 data-player="{{ loop.index0 }}"
+                                 {% if cycle.team1Players and cycle.team1Players[loop.index0] == 1 %}checked{% else %}checked{% endif %}>
+                          <label class="form-check-label small">{{ player.name.split()|last|first }}{{ player.name.split()[-1]|first if player.name.split()|length > 1 else '' }}</label>
+                        </div>
+                        {% endfor %}
+                        <div class="dropdown-divider my-1"></div>
+                        {% for player in team2_players %}
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input active-player" 
+                                 type="checkbox" 
+                                 name="cycle_{{ i }}_active_2_{{ loop.index0 }}" 
+                                 data-cycle="{{ i }}" 
+                                 data-team="2" 
+                                 data-player="{{ loop.index0 }}"
+                                 {% if cycle.team2Players and cycle.team2Players[loop.index0] == 1 %}checked{% else %}checked{% endif %}>
+                          <label class="form-check-label small">{{ player.name.split()|last|first }}{{ player.name.split()[-1]|first if player.name.split()|length > 1 else '' }}</label>
+                        </div>
+                        {% endfor %}
+                      </div>
+                    </td>
+                    <td class="align-middle">
+                      <input type="number" 
+                             class="form-control bonus-points" 
+                             name="cycle_{{ i }}_bonus1"
+                             value="{{ cycle.team1Bonus }}" 
+                             min="0" 
+                             step="10"
+                             data-cycle="{{ i }}"
+                             data-team="1">
+                    </td>
+                    <td class="align-middle">
+                      <input type="number" 
+                             class="form-control bonus-points" 
+                             name="cycle_{{ i }}_bonus2"
+                             value="{{ cycle.team2Bonus }}" 
+                             min="0" 
+                             step="10"
+                             data-cycle="{{ i }}"
+                             data-team="2">
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+                <tfoot class="table-light">
+                  <tr>
+                    <th>Totals</th>
+                    <th id="team1TossupTotal">0</th>
+                    <th id="team2TossupTotal">0</th>
+                    <th id="team1BonusTotal">0</th>
+                    <th id="team2BonusTotal">0</th>
+                  </tr>
+                  <tr>
+                    <th>Final Score</th>
+                    <th id="team1FinalTotal">0</th>
+                    <th id="team2FinalTotal">0</th>
+                    <th colspan="2">
+                      <select class="form-select" id="gameResult" name="game_result">
+                        <option value="0" {% if game.result == 0 %}selected{% endif %}>No Result</option>
+                        <option value="1" {% if game.result == 1 %}selected{% endif %}>Team 1 Wins</option>
+                        <option value="2" {% if game.result == 2 %}selected{% endif %}>Team 2 Wins</option>
+                        <option value="-1" {% if game.result == -1 %}selected{% endif %}>Tie</option>
+                      </select>
+                    </th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            
+            <div class="d-flex justify-content-between mt-4">
+              <button type="button" id="addQuestionBtn" class="btn btn-outline-primary">
+                <i class="fas fa-plus me-1"></i> Add Question
+              </button>
+              <button type="button" id="finalizeBtn" class="btn btn-success">
+                <i class="fas fa-check-circle me-1"></i> Finalize Scorecard
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Calculate and update totals
+  function updateTotals() {
+    let team1Tossup = 0;
+    let team2Tossup = 0;
+    let team1Bonus = 0;
+    let team2Bonus = 0;
+    
+    // Calculate tossup points
+    document.querySelectorAll('.player-score').forEach(select => {
+      const points = parseInt(select.value) || 0;
+      const team = parseInt(select.dataset.team);
+      
+      if (team === 1) team1Tossup += points;
+      else if (team === 2) team2Tossup += points;
+    });
+    
+    // Calculate bonus points
+    document.querySelectorAll('.bonus-points').forEach(input => {
+      const points = parseInt(input.value) || 0;
+      const team = parseInt(input.dataset.team);
+      
+      if (team === 1) team1Bonus += points;
+      else if (team === 2) team2Bonus += points;
+    });
+    
+    // Update the UI
+    document.getElementById('team1TossupTotal').textContent = team1Tossup;
+    document.getElementById('team2TossupTotal').textContent = team2Tossup;
+    document.getElementById('team1BonusTotal').textContent = team1Bonus;
+    document.getElementById('team2BonusTotal').textContent = team2Bonus;
+    document.getElementById('team1FinalTotal').textContent = team1Tossup + team1Bonus;
+    document.getElementById('team2FinalTotal').textContent = team2Tossup + team2Bonus;
+  }
+  
+  // Add event listeners
+  document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('player-score') || e.target.classList.contains('bonus-points')) {
+      updateTotals();
+    }
+  });
+  
+  // Save and finalize scorecard
+  function finalizeScorecard() {
+    if (!confirm('Are you sure you want to finalize this scorecard? This cannot be undone.')) {
+      return;
+    }
+
+    const form = document.getElementById('scorecardForm');
+    const formData = new FormData(form);
+    const scorecard = [];
+    
+    // Get the maximum cycle number
+    let maxCycle = 0;
+    document.querySelectorAll('[data-cycle]').forEach(el => {
+      maxCycle = Math.max(maxCycle, parseInt(el.dataset.cycle) || 0);
+    });
+    
+    // Get team player counts
+    const team1PlayerCount = document.querySelectorAll('.player-score[data-team="1"]').length / (maxCycle + 1);
+    const team2PlayerCount = document.querySelectorAll('.player-score[data-team="2"]').length / (maxCycle + 1);
+    
+    // Initialize scorecard with empty cycles
+    for (let i = 0; i <= maxCycle; i++) {
+      scorecard.push({
+        team1: {},
+        team2: {},
+        team1Bonus: 0,
+        team2Bonus: 0,
+        team1Players: Array(team1PlayerCount).fill(0),
+        team2Players: Array(team2PlayerCount).fill(0),
+        buzzes: scorecard[i]?.buzzes || {}
+      });
+    }
+    
+    // Process form data
+    for (const [key, value] of formData.entries()) {
+      if (key.startsWith('cycle_')) {
+        const parts = key.split('_');
+        const cycle = parseInt(parts[1]);
+        const type = parts[2];  // 'team1', 'team2', 'bonus1', 'bonus2', 'active'
+        
+        if (type === 'team1' || type === 'team2') {
+          const playerId = parts[3];
+          const team = type === 'team1' ? 'team1' : 'team2';
+          scorecard[cycle][team][playerId] = parseInt(value) || 0;
+        } else if (type === 'active') {
+          const teamNum = parseInt(parts[3]);
+          const playerIdx = parseInt(parts[4]);
+          const teamKey = `team${teamNum}Players`;
+          
+          if (scorecard[cycle][teamKey]) {
+            scorecard[cycle][teamKey][playerIdx] = value === 'on' ? 1 : 0;
+          }
+        } else if (type === 'bonus1') {
+          scorecard[cycle].team1Bonus = parseInt(value) || 0;
+        } else if (type === 'bonus2') {
+          scorecard[cycle].team2Bonus = parseInt(value) || 0;
+        }
+      }
+    }
+    
+    // Get game result
+    const result = parseInt(document.getElementById('gameResult').value) || 0;
+    
+    // Show loading state
+    const finalizeBtn = document.getElementById('finalizeBtn');
+    const originalBtnText = finalizeBtn.innerHTML;
+    finalizeBtn.disabled = true;
+    finalizeBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Finalizing...';
+    
+    // Send to server
+    fetch(`/admin/tournament/{{ tournament.id }}/game/{{ game.id }}/scorecard/save`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token() }}'
+      },
+      body: JSON.stringify({
+        scorecard: scorecard,
+        result: result,
+        is_final: true
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        window.location.href = '{{ url_for("admin.tournament_details", tournament_id=tournament.id) }}';
+      } else {
+        finalizeBtn.disabled = false;
+        finalizeBtn.innerHTML = originalBtnText;
+        alert('Error saving scorecard: ' + (data.error || 'Unknown error'));
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      finalizeBtn.disabled = false;
+      finalizeBtn.innerHTML = originalBtnText;
+      alert('Error saving scorecard. Please try again.');
+    });
+  }
+  
+  // Add question row
+  document.getElementById('addQuestionBtn').addEventListener('click', function() {
+    const tbody = document.getElementById('scorecardBody');
+    const cycle = tbody.children.length;
+    
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td class="align-middle">${cycle + 1}</td>
+      <td>
+        {% for player in team1_players %}
+        <div class="input-group mb-2">
+          <select class="form-select player-score" 
+                  name="cycle_${cycle}_team1_{{ player.id }}"
+                  data-cycle="${cycle}" 
+                  data-team="1" 
+                  data-player="{{ player.id }}">
+            <option value="0">0 - {{ player.name }}</option>
+            <option value="-5">-5 - {{ player.name }}</option>
+            <option value="10">10 - {{ player.name }}</option>
+            <option value="15">15 - {{ player.name }}</option>
+          </select>
+        </div>
+        {% endfor %}
+      </td>
+      <td>
+        {% for player in team2_players %}
+        <div class="input-group mb-2">
+          <select class="form-select player-score" 
+                  name="cycle_${cycle}_team2_{{ player.id }}"
+                  data-cycle="${cycle}" 
+                  data-team="2" 
+                  data-player="{{ player.id }}">
+            <option value="0">0 - {{ player.name }}</option>
+            <option value="-5">-5 - {{ player.name }}</option>
+            <option value="10">10 - {{ player.name }}</option>
+            <option value="15">15 - {{ player.name }}</option>
+          </select>
+        </div>
+        {% endfor %}
+      </td>
+      <td class="align-middle">
+        <div class="d-flex flex-column">
+          {% for player in team1_players %}
+          <div class="form-check form-check-inline">
+            <input class="form-check-input active-player" 
+                   type="checkbox" 
+                   name="cycle_${cycle}_active_1_{{ loop.index0 }}" 
+                   data-cycle="${cycle}" 
+                   data-team="1" 
+                   data-player="{{ loop.index0 }}"
+                   checked>
+            <label class="form-check-label small">{{ player.name.split()|last|first }}{{ player.name.split()[-1]|first if player.name.split()|length > 1 else '' }}</label>
+          </div>
+          {% endfor %}
+          <div class="dropdown-divider my-1"></div>
+          {% for player in team2_players %}
+          <div class="form-check form-check-inline">
+            <input class="form-check-input active-player" 
+                   type="checkbox" 
+                   name="cycle_${cycle}_active_2_{{ loop.index0 }}" 
+                   data-cycle="${cycle}" 
+                   data-team="2" 
+                   data-player="{{ loop.index0 }}"
+                   checked>
+            <label class="form-check-label small">{{ player.name.split()|last|first }}{{ player.name.split()[-1]|first if player.name.split()|length > 1 else '' }}</label>
+          </div>
+          {% endfor %}
+        </div>
+      </td>
+      <td class="align-middle">
+        <input type="number" 
+               class="form-control bonus-points" 
+               name="cycle_${cycle}_bonus1"
+               value="0" 
+               min="0" 
+               step="10"
+               data-cycle="${cycle}"
+               data-team="1">
+      </td>
+      <td class="align-middle">
+        <input type="number" 
+               class="form-control bonus-points" 
+               name="cycle_${cycle}_bonus2"
+               value="0" 
+               min="0" 
+               step="10"
+               data-cycle="${cycle}"
+               data-team="2">
+      </td>
+    `;
+    
+    tbody.appendChild(row);
+  });
+  
+  // Finalize button
+  document.getElementById('finalizeBtn').addEventListener('click', finalizeScorecard);
+  
+  // Initial totals calculation
+  updateTotals();
+});
+</script>
+
+<style>
+.player-score, .bonus-points {
+  min-width: 150px;
+}
+.form-check-inline {
+  margin-right: 0.5rem;
+  margin-bottom: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+}
+.form-check-label {
+  white-space: nowrap;
+  margin-left: 0.25rem;
+}
+.dropdown-divider {
+  margin: 0.25rem 0;
+  border-top: 1px solid #dee2e6;
+}
+</style>
+{% endblock %}

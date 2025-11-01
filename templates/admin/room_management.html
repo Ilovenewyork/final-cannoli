@@ -1,0 +1,119 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Room Management: {{ tournament.name }}</h2>
+        <a href="{{ url_for('admin.tournament_details', tournament_id=tournament.id) }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Tournament
+        </a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h4 class="mb-0">Add New Room Alias</h4>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('admin.add_room_alias', tournament_id=tournament.id) }}">
+                {{ form.hidden_tag() }}
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            {{ form.room_number.label(class="form-label") }}
+                            {{ form.room_number(class="form-control", placeholder="e.g., 1, 2, 3") }}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            {{ form.room_name.label(class="form-label") }}
+                            {{ form.room_name(class="form-control", placeholder="e.g., Main Hall, Library, etc.") }}
+                        </div>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-plus-circle"></i> Add Alias
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h4 class="mb-0">Room Aliases</h4>
+        </div>
+        <div class="card-body">
+            {% if room_aliases %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Room Number</th>
+                                <th>Alias</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for alias in room_aliases %}
+                                <tr>
+                                    <td>{{ alias.room_number }}</td>
+                                    <td>{{ alias.room_name }}</td>
+                                    <td>
+                                        <form method="POST" action="{{ url_for('admin.delete_room_alias', tournament_id=tournament.id, room_number=alias.room_number) }}" 
+                                              onsubmit="return confirm('Are you sure you want to remove this room alias?');">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                <i class="bi bi-trash"></i> Remove
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="alert alert-info">No room aliases have been created yet.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if rooms_without_aliases %}
+    <div class="card mt-4">
+        <div class="card-header">
+            <h4 class="mb-0">Rooms Without Aliases</h4>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">The following rooms have readers assigned but no aliases set up yet.</p>
+            <div class="d-flex flex-wrap gap-2">
+                {% for room in rooms_without_aliases %}
+                    <a href="#" class="btn btn-outline-secondary" 
+                       onclick="document.getElementById('room_number').value = '{{ room.room_number }}'; return false;">
+                        Room {{ room.room_number }}
+                    </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+// Auto-fill the room number when clicking on a room without an alias
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomNumber = urlParams.get('room');
+    if (roomNumber) {
+        document.getElementById('room_number').value = roomNumber;
+    }
+});
+</script>
+{% endblock %}

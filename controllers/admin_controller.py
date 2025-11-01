@@ -4,7 +4,7 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, SelectField, validators
 from wtforms.validators import DataRequired
 from extensions import db
-from models import Tournament, TeamAlias, Game, Player, Question, Admin, Reader, ReaderTournament, Alert
+from models import Tournament, TeamAlias, Game, Player, Question, Admin, Reader, ReaderTournament, Alert, RoomAlias
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from functools import wraps
@@ -234,6 +234,9 @@ def create_tournament():
 @admin_login_required
 def tournament_details(tournament_id):
     try:
+        # Import the room utility function
+        from utils.room_utils import get_room_display_name
+        
         # Load tournament with reader assignments
         tournament = Tournament.query.options(
             db.joinedload(Tournament.reader_assignments).joinedload(ReaderTournament.reader)
@@ -290,9 +293,9 @@ def tournament_details(tournament_id):
                             db.session.add(player)
                     
                     db.session.commit()
-                    success_msg = f'Successfully assigned team name "{team_name}" to {team_id} with {len(player_names) if players_str else 0} players'
-                    current_app.logger.info(success_msg)
-                    flash(success_msg, 'success')
+                    # success_msg = f'Successfully assigned team name "{team_name}" to {team_id} with {len(player_names) if players_str else 0} players'
+                    # current_app.logger.info(success_msg)
+                    # flash(success_msg, 'success')
                 except Exception as e:
                     error_msg = f'Error adding team alias: {str(e)}'
                     current_app.logger.error(error_msg, exc_info=True)
@@ -444,6 +447,14 @@ def tournament_details(tournament_id):
         # Get list of assigned room numbers, ensuring it's always a list
         assigned_rooms = [ra.room_number for ra in tournament.reader_assignments] if tournament.reader_assignments else []
         
+        # Get room aliases for the tournament
+        room_aliases = {}
+        for alias in tournament.room_aliases:
+            room_aliases[alias.room_number] = alias.room_name
+        
+        # Import the room utility function
+        from utils.room_utils import get_room_display_name
+        
         # Render the template with the processed games
         return render_template('admin/tournament_details.html',
                            tournament=tournament,
@@ -459,7 +470,9 @@ def tournament_details(tournament_id):
                            question_counts=question_counts,
                            tossup_counts=tossup_counts,
                            bonus_counts=bonus_counts,
-                           assigned_rooms=assigned_rooms)
+                           assigned_rooms=assigned_rooms,
+                           room_aliases=room_aliases,
+                           get_room_display_name=get_room_display_name)
                            
     except Exception as e:
         db.session.rollback()
@@ -666,9 +679,9 @@ def create_games(tournament_id, stage_id):
             try:
                 print(f"   Committing {games_created} new games to the database...")
                 db.session.commit()
-                msg = f'Successfully created {games_created} games for stage {stage_id}!'
+                # msg = f'Successfully created {games_created} games for stage {stage_id}!'
                 print(f"   {msg}")
-                flash(msg, 'success')
+                # flash(msg, 'success')
                 success = True
                 
                 # If this is a playoff stage, update the tournament status
@@ -973,11 +986,11 @@ def create_playoff_games(tournament_id):
             if games_created > 0:
                 db.session.commit()
                 print(f"Successfully created {games_created} new games for stage {stage_id}")
-                flash(f'Successfully created {games_created} new games for stage {stage_id}', 'success')
+                # flash(f'Successfully created {games_created} new games for stage {stage_id}', 'success')
                 success = True
             else:
                 print("No new games were created")
-                flash('No new games were created - all games already exist', 'info')
+                # flash('No new games were created - all games already exist', 'info')
                 success = True
                 
         except Exception as e:
@@ -992,7 +1005,8 @@ def create_playoff_games(tournament_id):
             try:
                 # Update tournament status to indicate this stage's games have been created
                 # You might want to add a field to track which stages have been created
-                current_app.logger.info(f"Successfully created {games_created} games for stage {stage_id}")
+                # current_app.logger.info(f"Successfully created {games_created} games for stage {stage_id}")
+                pass  # Added to fix empty try block
             except Exception as e:
                 current_app.logger.warning(f"Could not update tournament status: {str(e)}")
         
@@ -2730,6 +2744,10 @@ def list_tournament_games(tournament_id):
                      .order_by(Game.stage_id, Game.round_number, Game.id)\
                      .all()
     
+    # Get all team aliases for this tournament
+    aliases = TeamAlias.query.filter_by(tournament_id=tournament_id).all()
+    alias_map = {alias.id: alias.team_name for alias in aliases}
+    
     # Organize games by stage and round
     games_by_stage = {}
     for game in games:
@@ -2747,6 +2765,23 @@ def list_tournament_games(tournament_id):
             games_by_stage[stage_id] = {}
         if round_num not in games_by_stage[stage_id]:
             games_by_stage[stage_id][round_num] = []
+        
+        # Add resolved team names to the game object
+        def get_team_name(team_ref):
+            if not team_ref:
+                return None
+            if team_ref.startswith(('W(', 'L(')):
+                _, name, _ = resolve_team_reference(tournament_id, team_ref)
+                return name or team_ref
+            # Check if it's a team alias ID
+            try:
+                alias_id = int(team_ref.replace('T', ''))
+                return alias_map.get(alias_id, team_ref)
+            except (ValueError, AttributeError):
+                return team_ref
+        
+        game.team1_name = get_team_name(game.team1)
+        game.team2_name = get_team_name(game.team2)
         
         # Add the game to the appropriate stage and round
         games_by_stage[stage_id][round_num].append(game)
@@ -2766,16 +2801,27 @@ def list_tournament_games(tournament_id):
 
 # Export the upload_round_file function for CSRF exemption
 @admin_bp.route('/alerts', methods=['GET'])
-# @login_required  # Temporarily disabled for testing
+@login_required
 def get_alerts():
     """
     API endpoint to get all active (unresolved) alerts.
+    Optional query parameters:
+        - tournament_id: Filter alerts by tournament
     """
     try:
         current_app.logger.info('GET /admin/alerts endpoint called')
+        tournament_id = request.args.get('tournament_id', type=int)
         
-        # Get active (unresolved) alerts
-        alerts = Alert.query.filter_by(resolved=False).order_by(Alert.created_at.desc()).all()
+        # Start with base query for unresolved alerts
+        query = Alert.query.filter_by(resolved=False)
+        
+        # If tournament_id is provided, filter by tournament
+        if tournament_id:
+            query = query.join(Game).filter(Game.tournament_id == tournament_id)
+        
+        # Order by creation time (newest first)
+        alerts = query.order_by(Alert.created_at.desc()).all()
+        
         current_app.logger.info(f'Found {len(alerts)} active alerts')
         
         # Convert alerts to dictionary format for JSON serialization
@@ -2786,7 +2832,7 @@ def get_alerts():
             'alerts': alerts_data
         }
         
-        current_app.logger.info(f'Returning response: {response_data}')
+        current_app.logger.info('Successfully retrieved alerts')
         response = jsonify(response_data)
         response.headers['Content-Type'] = 'application/json'
         return response
@@ -2800,6 +2846,7 @@ def get_alerts():
         })
         response.status_code = 500
         response.headers['Content-Type'] = 'application/json'
+        return response
         return response
 
 @admin_bp.route('/alerts/<int:alert_id>/resolve', methods=['POST'])
@@ -2825,5 +2872,229 @@ def resolve_alert(alert_id):
             'success': False,
             'error': 'Failed to resolve alert'
         }), 500
+
+@admin_bp.route('/tournament/<int:tournament_id>/game/<int:game_id>/simple-scorecard', methods=['GET', 'POST'])
+@admin_login_required
+def simple_scorecard_editor(tournament_id, game_id):
+    """
+    Simplified scorecard editor for admins.
+    Allows editing all scorecard fields except buzzes.
+    """
+    tournament = Tournament.query.get_or_404(tournament_id)
+    game = Game.query.get_or_404(game_id)
+    
+    # Get teams and players
+    team1_id = game.team1
+    team2_id = game.team2
+    
+    # Get team display names (handle both direct names and references)
+    team1_display_name = team1_id
+    team2_display_name = team2_id
+    
+    # Resolve team references if needed (e.g., W(S2R1M4))
+    if team1_id and (str(team1_id).startswith('W(') or str(team1_id).startswith('L(')):
+        _, resolved_name, _ = resolve_team_reference(tournament_id, team1_id)
+        if resolved_name:
+            team1_display_name = resolved_name
+            
+    if team2_id and (str(team2_id).startswith('W(') or str(team2_id).startswith('L(')):
+        _, resolved_name, _ = resolve_team_reference(tournament_id, team2_id)
+        if resolved_name:
+            team2_display_name = resolved_name
+    
+    # Get players for each team
+    team1_players = Player.query.filter_by(tournament_id=tournament_id, team_id=team1_id).all()
+    team2_players = Player.query.filter_by(tournament_id=tournament_id, team_id=team2_id).all()
+    
+    # Get questions for this game (if any)
+    questions = Question.query.filter_by(
+        tournament_id=tournament_id,
+        stage_id=game.stage_id,
+        round_number=game.round_number
+    ).order_by(Question.id).all()
+    
+    # Handle POST request to save and finalize the scorecard
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            scorecard = data.get('scorecard', [])
+            result = data.get('result', 0)
+            
+            # Calculate final scores
+            team1_score = 0
+            team2_score = 0
+            
+            for cycle in scorecard:
+                # Add up tossup points
+                for player_id, points in cycle.get('team1', {}).items():
+                    team1_score += int(points) if str(points).lstrip('-').isdigit() else 0
+                for player_id, points in cycle.get('team2', {}).items():
+                    team2_score += int(points) if str(points).lstrip('-').isdigit() else 0
+                
+                # Add bonus points
+                team1_score += int(cycle.get('team1Bonus', 0))
+                team2_score += int(cycle.get('team2Bonus', 0))
+            
+            # Set the game result based on scores if not explicitly set
+            if result == 0:
+                if team1_score > team2_score:
+                    result = 1
+                elif team2_score > team1_score:
+                    result = 2
+                else:
+                    result = -1  # Tie
+            
+            # Update the game with the final scorecard and result
+            game.scorecard = json.dumps(scorecard)
+            game.result = result
+            game.team1_score = team1_score
+            game.team2_score = team2_score
+            
+            db.session.commit()
+            return jsonify({'success': True})
+            
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error finalizing scorecard: {str(e)}", exc_info=True)
+            return jsonify({'success': False, 'error': str(e)}), 400
+    
+    # For GET request, load the scorecard if it exists
+    scorecard = []
+    if game.scorecard:
+        try:
+            scorecard = json.loads(game.scorecard)
+        except json.JSONDecodeError:
+            current_app.logger.error(f"Invalid scorecard JSON for game {game_id}")
+            scorecard = []
+    
+    # If no scorecard exists, initialize with empty cycles
+    if not scorecard:
+        # Default to 20 tossups if no questions exist, otherwise use the number of questions
+        num_tossups = len(questions) if questions else 20
+        scorecard = [{
+            'team1': {},
+            'team2': {},
+            'team1Bonus': 0,
+            'team2Bonus': 0,
+            'buzzes': {}
+        } for _ in range(num_tossups)]
+    
+    return render_template(
+        'admin/simple_scorecard_editor.html',
+        tournament=tournament,
+        game=game,
+        team1_id=team1_id,
+        team1_name=team1_display_name,
+        team2_id=team2_id,
+        team2_name=team2_display_name,
+        questions=questions,
+        team1_players=team1_players,
+        team2_players=team2_players,
+        scorecard=scorecard
+    )
+
+# Room Management Routes
+
+class RoomAliasForm(FlaskForm):
+    """Form for creating or updating room aliases."""
+    room_number = StringField('Room Number', validators=[DataRequired()])
+    room_name = StringField('Room Name', validators=[DataRequired()])
+    submit = SubmitField('Save')
+
+@admin_bp.route('/tournament/<int:tournament_id>/rooms', methods=['GET'])
+@admin_login_required
+def manage_rooms(tournament_id):
+    """Manage room aliases for a tournament."""
+    tournament = Tournament.query.get_or_404(tournament_id)
+    room_aliases = RoomAlias.query.filter_by(tournament_id=tournament_id).all()
+    
+    # Get all rooms that have readers assigned but no alias yet
+    assigned_rooms = db.session.query(
+        ReaderTournament.room_number
+    ).filter(
+        ReaderTournament.tournament_id == tournament_id,
+        ReaderTournament.room_number.isnot(None)
+    ).distinct().all()
+    
+    # Convert to a set of room numbers
+    assigned_room_numbers = {r.room_number for r in assigned_rooms}
+    
+    # Find rooms that don't have aliases yet
+    rooms_without_aliases = [
+        {'room_number': num} 
+        for num in assigned_room_numbers 
+        if not any(alias.room_number == num for alias in room_aliases)
+    ]
+    
+    form = RoomAliasForm()
+    return render_template(
+        'admin/room_management.html',
+        tournament=tournament,
+        room_aliases=room_aliases,
+        rooms_without_aliases=rooms_without_aliases,
+        form=form
+    )
+
+@admin_bp.route('/tournament/<int:tournament_id>/rooms/add', methods=['POST'])
+@admin_login_required
+def add_room_alias(tournament_id):
+    """Add a new room alias."""
+    tournament = Tournament.query.get_or_404(tournament_id)
+    form = RoomAliasForm()
+    
+    if form.validate_on_submit():
+        try:
+            room_number = int(form.room_number.data)
+            room_alias = RoomAlias(
+                room_number=room_number,
+                room_name=form.room_name.data,
+                tournament_id=tournament_id
+            )
+            
+            # Check if alias already exists for this room
+            existing = RoomAlias.query.filter_by(
+                tournament_id=tournament_id,
+                room_number=room_number
+            ).first()
+            
+            if existing:
+                flash(f'Alias for Room {room_number} already exists', 'warning')
+            else:
+                db.session.add(room_alias)
+                db.session.commit()
+                flash(f'Added alias for Room {room_number}', 'success')
+                
+        except ValueError:
+            flash('Room number must be a number', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f'Error adding room alias: {str(e)}')
+            flash('An error occurred while adding the room alias', 'danger')
+    else:
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f'Error in {field}: {error}', 'danger')
+    
+    return redirect(url_for('admin.manage_rooms', tournament_id=tournament_id))
+
+@admin_bp.route('/tournament/<int:tournament_id>/rooms/<int:room_number>/delete', methods=['POST'])
+@admin_login_required
+def delete_room_alias(tournament_id, room_number):
+    """Delete a room alias."""
+    room_alias = RoomAlias.query.filter_by(
+        tournament_id=tournament_id,
+        room_number=room_number
+    ).first_or_404()
+    
+    try:
+        db.session.delete(room_alias)
+        db.session.commit()
+        flash(f'Removed alias for Room {room_number}', 'success')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Error deleting room alias: {str(e)}')
+        flash('An error occurred while removing the room alias', 'danger')
+    
+    return redirect(url_for('admin.manage_rooms', tournament_id=tournament_id))
 
 __all__ = ['admin_bp', 'upload_round_file']
